@@ -1,6 +1,6 @@
 # 00 - Overview
 
-The Self-Healing ML Platform is designed for real-time fraud detection systems where model quality, latency, and governance all matter at once.
+The Self-Healing ML Platform is designed for real-time fraud detection systems where model quality, latency, and governance all matter at once. Production fraud models are served as [Timber](https://github.com/kossisoroyce/timber)-compiled native C99 artifacts so the scoring path is fast, deterministic, and auditable by artifact hash.
 
 ## What Self-Healing Means
 

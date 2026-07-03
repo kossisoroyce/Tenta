@@ -6,18 +6,19 @@ The runtime engine receives transaction requests, prepares features, calls the w
 
 - Validate transaction payloads.
 - Fetch or compute online features.
-- Call the active fraud model through the model wrapper.
+- Verify the Ed25519 signature of the loaded Timber-compiled model artifact on load.
+- Call the active fraud model through the model wrapper (a native call into the Timber-compiled C99 artifact).
 - Apply threshold, block, allow, review, or step-up rules.
 - Emit decision events for memory and monitoring.
-- Enforce latency budgets and fallback behavior.
+- Enforce latency budgets and fallback behavior, including hot-swap to a previous signed Timber artifact.
 
 ## Runtime Requirements
 
-- Bounded p99 latency.
+- Bounded p99 latency. Native inference through Timber-compiled artifacts keeps the model call itself sub-millisecond for typical fraud tree ensembles, leaving the budget for feature IO and policy evaluation.
 - Backpressure handling.
 - Idempotency support for retried transaction requests.
 - Graceful fallback when feature stores or models are degraded.
-- Structured logs and metrics for every decision path.
+- Structured logs and metrics for every decision path, including the active Timber artifact hash for full traceability.
 
 ## Failure Modes
 

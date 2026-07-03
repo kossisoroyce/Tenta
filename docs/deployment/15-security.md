@@ -8,7 +8,8 @@ Fraud detection platforms handle sensitive signals, high-impact decisions, and a
 - Enforce least-privilege access to decision, feedback, and feature stores.
 - Keep audit logs immutable.
 - Protect model artifacts and registry credentials.
-- Require signed model and policy artifacts before production use.
+- Require signed model and policy artifacts before production use. Model artifacts are produced by [Timber](https://github.com/kossisoroyce/timber) and signed with Ed25519; the runtime refuses to load an artifact whose signature does not verify against a trusted key.
+- Store artifacts at rest with AES-256-GCM; use Timber's air-gapped deployment bundle format for regulated / offline environments.
 - Rate-limit sensitive APIs.
 - Monitor for abnormal approval, rollback, and threshold-change behavior.
 
