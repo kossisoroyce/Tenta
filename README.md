@@ -1,6 +1,6 @@
-# Self-Healing ML Platform
+# Self healing ML architecture for fraud detection in high frequency financial transaction systems
 
-Self-Healing ML Platform is a reference architecture for fraud detection in high-frequency financial transaction systems. The platform wraps fraud models with runtime monitoring, drift detection, memory, policy controls, online learning, and human review workflows so production models can adapt safely without becoming ungoverned.
+A reference architecture for fraud detection in high-frequency financial transaction systems. The platform wraps fraud models with runtime monitoring, drift detection, memory, policy controls, online learning, and human review workflows so production models can adapt safely without becoming ungoverned.
 
 ## Goals
 
