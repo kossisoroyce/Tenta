@@ -68,7 +68,13 @@ def make_handler(
             parsed = urlparse(self.path)
 
             if console is not None:
-                result = console.dispatch("GET", parsed.path, None, parse_qs(parsed.query))
+                result = console.dispatch(
+                    "GET",
+                    parsed.path,
+                    None,
+                    parse_qs(parsed.query),
+                    request_context={"base_url": self._request_base_url()},
+                )
                 if result is not None:
                     self._send_json(result[0], result[1])
                     return
@@ -131,7 +137,12 @@ def make_handler(
                 return
 
             if console is not None:
-                result = console.dispatch("POST", parsed.path, payload)
+                result = console.dispatch(
+                    "POST",
+                    parsed.path,
+                    payload,
+                    request_context={"base_url": self._request_base_url()},
+                )
                 if result is not None:
                     self._send_json(result[0], result[1])
                     return
@@ -223,6 +234,16 @@ def make_handler(
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
+
+        def _request_base_url(self) -> str:
+            proto = (self.headers.get("X-Forwarded-Proto") or "http").split(",")[0].strip() or "http"
+            host = (
+                self.headers.get("X-Forwarded-Host")
+                or self.headers.get("Host")
+                or f"{self.server.server_address[0]}:{self.server.server_address[1]}"
+            )
+            host = host.split(",")[0].strip()
+            return f"{proto}://{host}"
 
     return RuntimeRequestHandler
 

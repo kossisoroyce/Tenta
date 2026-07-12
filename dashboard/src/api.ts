@@ -122,6 +122,25 @@ export interface ModelMetrics {
   p99_latency_ms: number;
 }
 
+export interface ServingEndpoint {
+  model_id: string;
+  model_version: string;
+  stage: Stage;
+  status: "serving" | "registered_not_serving";
+  url: string | null;
+  endpoint_url: string | null;
+  method: "POST";
+  content_type: string;
+  contract: string;
+  serving_mode: string;
+  workload_id: string;
+  health_url: string;
+  workload_url: string;
+  decision_lookup_url: string;
+  promotion_url: string;
+  notes: string;
+}
+
 export interface ModelRecord {
   model_id: string;
   version: string;
@@ -135,6 +154,7 @@ export interface ModelRecord {
   promoted_at: string | null;
   created_at: string;
   notes: string;
+  serving_endpoint?: ServingEndpoint;
 }
 
 export interface Artifact {
@@ -156,6 +176,7 @@ export interface ModelsResponse {
   counts: { total: number; candidate: number; shadow: number; archived: number };
   models: ModelRecord[];
   available_artifacts: Artifact[];
+  serving_endpoint: ServingEndpoint;
 }
 
 /* --------------------------------- Healing --------------------------------- */
@@ -403,6 +424,7 @@ export const getTransaction = (id: string) =>
 export const postScore = (body: ScoreRequest) => post<ScoreResponse>("/v1/decision-requests", body);
 
 export const getModels = () => request<ModelsResponse>("/v1/models");
+export const getServingEndpoint = () => request<ServingEndpoint>("/v1/serving-endpoint");
 export const loadModel = (artifact_id: string) => post<ModelRecord>("/v1/models/load", { artifact_id });
 export interface UploadSpec {
   model_id: string;

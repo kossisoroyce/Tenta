@@ -70,12 +70,21 @@ class RuntimeCliTests(unittest.TestCase):
 
         self.assertIn("serve", help_text)
         self.assertIn("health", help_text)
+        self.assertIn("endpoint", help_text)
         self.assertIn("decide", help_text)
         self.assertIn("score", help_text)
         self.assertIn("workload", help_text)
         self.assertIn("replay", help_text)
         self.assertIn("audit", help_text)
         self.assertIn("db", help_text)
+
+    def test_endpoint_command_prints_app_facing_url(self):
+        output = self._run_cli("endpoint", "--url", self.base_url)
+        payload = json.loads(output)
+
+        self.assertEqual(payload["status"], "serving")
+        self.assertEqual(payload["url"], f"{self.base_url}/v1/decision-requests")
+        self.assertEqual(payload["contract"], "decision_request.v1")
 
     def test_score_and_transaction_commands(self):
         score_output = self._run_cli("score", "--url", self.base_url, "--sample")

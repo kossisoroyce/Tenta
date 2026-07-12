@@ -183,6 +183,47 @@ class RuntimeApiTests(unittest.TestCase):
         self.assertEqual(body["available_backends"][1]["backend"], "postgres")
         self.assertTrue(body["available_backends"][1]["provisionable"])
 
+    def test_serving_endpoint_reports_app_facing_decision_url(self):
+        body = self._get_json("/v1/serving-endpoint")
+
+        self.assertEqual(body["status"], "serving")
+        self.assertEqual(body["model_id"], "fraud-xgb-v12")
+        self.assertEqual(body["url"], f"{self.base_url}/v1/decision-requests")
+        self.assertEqual(body["method"], "POST")
+        self.assertEqual(body["contract"], "decision_request.v1")
+        self.assertEqual(body["serving_mode"], "governed_decision_runtime")
+        self.assertEqual(body["workload_id"], "decision_risk")
+
+    def test_models_endpoint_decorates_champion_with_serving_endpoint(self):
+        body = self._get_json("/v1/models")
+        champion = next(model for model in body["models"] if model["stage"] == "champion")
+        candidate = next(model for model in body["models"] if model["stage"] == "candidate")
+
+        self.assertEqual(body["serving_endpoint"]["url"], f"{self.base_url}/v1/decision-requests")
+        self.assertEqual(champion["serving_endpoint"]["status"], "serving")
+        self.assertEqual(champion["serving_endpoint"]["url"], f"{self.base_url}/v1/decision-requests")
+        self.assertEqual(candidate["serving_endpoint"]["status"], "registered_not_serving")
+        self.assertIsNone(candidate["serving_endpoint"]["url"])
+
+    def test_promoting_model_to_champion_returns_serving_endpoint(self):
+        body = self._post_json(
+            "/v1/models/fraud-xgb-v13-rc2/promote",
+            {
+                "stage": "champion",
+                "actor": "casey@example.com",
+                "role": "model-risk",
+                "request_id": "req-model-promote",
+            },
+        )
+
+        self.assertEqual(body["model_id"], "fraud-xgb-v13-rc2")
+        self.assertEqual(body["stage"], "champion")
+        self.assertEqual(body["serving_endpoint"]["status"], "serving")
+        self.assertEqual(body["serving_endpoint"]["url"], f"{self.base_url}/v1/decision-requests")
+        operations = self._get_json("/v1/operations?limit=1")
+        self.assertEqual(operations["operations"][0]["operation_type"], "model.promote")
+        self.assertEqual(operations["operations"][0]["request_id"], "req-model-promote")
+
     def test_database_provision_sqlite_endpoint_connects_runtime(self):
         db_path = str(Path(self.static_dir.name) / "runtime.sqlite3")
 

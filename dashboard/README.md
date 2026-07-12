@@ -33,9 +33,12 @@ mutates real server state.
 | **Metrics** — latency, throughput, model comparison | `#/benchmarks` | `GET /v1/benchmarks` |
 
 Promoting a model actually swaps the live scorer; every approve/promote/rollback
-is recorded to policy history. Light/dark theming is system-aware with a manual
-toggle. The control plane lives in `runtime/tenta_runtime/control_plane.py` and
-its routes in `console_api.py`.
+is recorded to policy history. The Models view also displays the current
+application-facing serving endpoint returned by `GET /v1/serving-endpoint`, so
+operators can copy the governed URL apps should call after a Timber artifact is
+promoted to champion. Light/dark theming is system-aware with a manual toggle.
+The control plane lives in `runtime/tenta_runtime/control_plane.py` and its
+routes in `console_api.py`.
 
 ## Develop
 

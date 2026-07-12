@@ -26,6 +26,8 @@ needs context, control, and a durable record.
 - Python runtime package and `tenta` CLI.
 - Stdlib HTTP API for decisions, health, audit, workload control, feedback,
   drift, model operations, healing actions, and database provisioning.
+- App-facing serving endpoint discovery for the live Timber-backed champion
+  model.
 - Generic `decision_risk` workload plus a `payment_fraud` reference workload.
 - Workload import/export, activation, validation, sample payloads, and replay
   fixtures.
@@ -71,6 +73,14 @@ PYTHONPATH=runtime python3 -m tenta_runtime serve --host 127.0.0.1 --port 8080
 ```
 
 ## Make A Decision
+
+When a Timber artifact is promoted to champion, apps call Tenta's governed
+decision endpoint rather than a raw model server. That stable endpoint keeps
+policy, audit, idempotency, workload validation, and rollback in the path.
+
+```bash
+tenta endpoint --url http://127.0.0.1:8080
+```
 
 ```bash
 tenta decide --sample --url http://127.0.0.1:8080
@@ -119,6 +129,7 @@ print(result["decision"], result["score"])
 
 ```bash
 tenta health --url http://127.0.0.1:8080
+tenta endpoint --url http://127.0.0.1:8080
 tenta decisions --limit 10 --url http://127.0.0.1:8080
 tenta decision req-001 --url http://127.0.0.1:8080
 tenta audit verify --url http://127.0.0.1:8080
@@ -151,6 +162,7 @@ tenta db provision-postgres --url http://127.0.0.1:8080
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/v1/health` | Runtime and dependency health |
+| `GET` | `/v1/serving-endpoint` | Current app-facing model endpoint |
 | `POST` | `/v1/decision-requests` | Score and persist a decision |
 | `GET` | `/v1/decision-requests/{id}` | Fetch a decision trail |
 | `GET` | `/v1/overview` | Dashboard overview payload |
@@ -203,10 +215,10 @@ the production dashboard from the runtime.
 ## Project Status
 
 Tenta is pre-release. The core engine, local dashboard, storage provisioning,
-workload registry, replay fixtures, and audit integrity checks are working. The
-next major push is hardening the extension surface: production model adapters,
-packaging polish, SDK ergonomics, signed artifact loading, deeper benchmarks,
-and deployment automation.
+workload registry, app-facing serving endpoint discovery, replay fixtures, and
+audit integrity checks are working. The next major push is hardening the
+extension surface: production model adapters, packaging polish, SDK ergonomics,
+signed artifact loading, deeper benchmarks, and deployment automation.
 
 ## License
 

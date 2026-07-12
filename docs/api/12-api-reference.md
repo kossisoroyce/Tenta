@@ -57,6 +57,33 @@ Returns runtime, model, policy, storage, audit, and dependency status. Storage
 health includes `schema_version` when the backend supports migrations.
 The response also includes the active workload summary under `workload`.
 
+### `GET /v1/serving-endpoint`
+
+Returns the current application-facing endpoint for the live champion model.
+Timber artifacts run behind this governed Tenta endpoint rather than being
+exposed as raw model microservices. Applications should send decision requests
+to the returned `url`.
+
+```json
+{
+  "model_id": "fraud-xgb-v12",
+  "model_version": "12.3.0",
+  "stage": "champion",
+  "status": "serving",
+  "url": "http://127.0.0.1:8080/v1/decision-requests",
+  "endpoint_url": "http://127.0.0.1:8080/v1/decision-requests",
+  "method": "POST",
+  "content_type": "application/json",
+  "contract": "decision_request.v1",
+  "serving_mode": "governed_decision_runtime",
+  "workload_id": "decision_risk"
+}
+```
+
+The endpoint is stable across model promotions. Promoting a new Timber artifact
+to champion changes the model behind the endpoint while preserving policy,
+audit, idempotency, workload validation, and rollback controls.
+
 ## Workload Registry API
 
 Workloads let Tenta describe decision domains without forking the runtime. A
@@ -271,6 +298,7 @@ write a `governance.denied` operation event with the allowed roles.
 - `POST /v1/workloads/activate`
 - `POST /v1/workloads/import`
 - `GET /v1/models`
+- `GET /v1/models/{model_id}/endpoint`
 - `POST /v1/models/load`
 - `POST /v1/models/{model_id}/promote`
 - `POST /v1/models/rollback`
@@ -284,6 +312,37 @@ write a `governance.denied` operation event with the allowed roles.
 - `GET /v1/feedback`
 - `POST /v1/feedback`
 - `GET /v1/benchmarks`
+
+### Model Registry And Serving Endpoints
+
+`GET /v1/models` returns registered models, available signed artifacts, and the
+current `serving_endpoint`. Each model row is also decorated with its own
+`serving_endpoint` object. Only the champion returns a live `url`; candidates,
+shadow models, fallbacks, and archived models return `status:
+registered_not_serving`.
+
+`GET /v1/models/{model_id}/endpoint` returns the serving status for one model.
+This is useful after a Timber artifact is uploaded, loaded, or promoted.
+
+`POST /v1/models/load`, `POST /v1/models/upload`,
+`POST /v1/models/{model_id}/promote`, and `POST /v1/models/rollback` return the
+model record plus `serving_endpoint`. When a model is promoted to `champion`,
+the response contains the app-facing URL to use:
+
+```json
+{
+  "model_id": "fraud-xgb-v13-rc2",
+  "version": "13.0.0-rc2",
+  "stage": "champion",
+  "serving_endpoint": {
+    "status": "serving",
+    "url": "http://127.0.0.1:8080/v1/decision-requests",
+    "method": "POST",
+    "contract": "decision_request.v1",
+    "serving_mode": "governed_decision_runtime"
+  }
+}
+```
 
 ### `POST /v1/feedback`
 

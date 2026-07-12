@@ -29,6 +29,7 @@ DEFAULT_BASE_URL = "http://127.0.0.1:8080"
 COMMANDS = {
     "serve",
     "health",
+    "endpoint",
     "decide",
     "decision",
     "score",
@@ -55,6 +56,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         _serve(parsed)
     elif parsed.command == "health":
         _print_json(_request_json(parsed.url, "/v1/health"))
+    elif parsed.command == "endpoint":
+        _print_json(_request_json(parsed.url, "/v1/serving-endpoint"))
     elif parsed.command == "decisions":
         _print_json(_request_json(parsed.url, f"/v1/decisions?limit={parsed.limit}"))
     elif parsed.command == "decision":
@@ -112,6 +115,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     health = subparsers.add_parser("health", help="Fetch runtime health.")
     health.add_argument("--url", default=DEFAULT_BASE_URL)
+
+    endpoint = subparsers.add_parser("endpoint", help="Fetch the current app-facing serving endpoint.")
+    endpoint.add_argument("--url", default=DEFAULT_BASE_URL)
 
     decisions = subparsers.add_parser("decisions", help="List recent decision audit events.")
     decisions.add_argument("--url", default=DEFAULT_BASE_URL)

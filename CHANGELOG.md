@@ -23,3 +23,5 @@ surfaces stabilize.
   benchmarks, policy history, and runtime controls.
 - React, TypeScript, Vite, and Kumo dashboard served by the runtime.
 - GitHub CI, issue templates, PR template, README assets, and runnable examples.
+- App-facing serving endpoint discovery through `GET /v1/serving-endpoint`,
+  `tenta endpoint`, and model promotion responses.

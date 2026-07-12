@@ -34,6 +34,7 @@ The first implementation slice is a dependency-free Python runtime package in
   Postgres backends.
 - Persistent control-plane snapshots for model registry, active model, healing,
   drift, feedback, benchmarks, and policy history.
+- App-facing serving endpoint discovery for the current champion model.
 - Analyst feedback ingestion that updates feedback memory and records an
   operation event.
 - Drift signal ingestion that updates monitors and proposes policy-gated healing
@@ -90,6 +91,7 @@ When installed, the package exposes `tenta`:
 ```bash
 tenta serve
 tenta health --url http://127.0.0.1:8080
+tenta endpoint --url http://127.0.0.1:8080
 tenta decide --url http://127.0.0.1:8080 --sample
 tenta score --url http://127.0.0.1:8080 --sample
 tenta decisions --url http://127.0.0.1:8080 --limit 10
@@ -141,6 +143,32 @@ with `/v1/workloads/validate`, and records workload activation/import as
 `workload.activate` and `workload.import` operation events. The active workload
 id is persisted in `data/tenta-runtime.json`; imported specs are persisted in
 `data/workloads` when `persist` is true.
+
+## Serving Endpoint Discovery
+
+Timber produces the signed native model artifact, but applications should call
+Tenta's governed decision endpoint:
+
+```bash
+tenta endpoint --url http://127.0.0.1:8080
+```
+
+The response includes the active champion model, workload id, method, contract,
+and URL:
+
+```json
+{
+  "status": "serving",
+  "url": "http://127.0.0.1:8080/v1/decision-requests",
+  "method": "POST",
+  "contract": "decision_request.v1",
+  "serving_mode": "governed_decision_runtime"
+}
+```
+
+Model load, upload, promote, rollback, and registry responses include the same
+`serving_endpoint` object. Only the champion model reports a live app endpoint;
+candidate and shadow models remain registered but not app-facing.
 
 ## Replay Fixtures
 

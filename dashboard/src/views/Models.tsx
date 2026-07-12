@@ -244,6 +244,20 @@ export function Models() {
         <StatTile label="Registered models" value={data.counts.total} sub={`${data.counts.archived} archived`} />
       </div>
 
+      <Panel eyebrow="Serving endpoint" title="Application integration">
+        <InfoGrid>
+          <InfoRow label="Endpoint">
+            <span className="mono break-anywhere">{data.serving_endpoint.url ?? "Promote a champion model to expose the app endpoint"}</span>
+          </InfoRow>
+          <InfoRow label="Method">
+            <Badge variant="blue">{data.serving_endpoint.method}</Badge>
+          </InfoRow>
+          <InfoRow label="Contract">{data.serving_endpoint.contract}</InfoRow>
+          <InfoRow label="Workload">{data.serving_endpoint.workload_id}</InfoRow>
+          <InfoRow label="Mode">{data.serving_endpoint.serving_mode.replace(/_/g, " ")}</InfoRow>
+        </InfoGrid>
+      </Panel>
+
       {shadow && championMetrics && shadowMetrics && (
         <Panel eyebrow="Version comparison" title={`${shadow.model_id} vs champion`}>
           <div className="compare-grid">

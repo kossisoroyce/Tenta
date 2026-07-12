@@ -46,6 +46,10 @@ body {
   font-size: 0.86em;
 }
 
+.break-anywhere {
+  overflow-wrap: anywhere;
+}
+
 .muted {
   color: var(--text-color-kumo-subtle);
 }

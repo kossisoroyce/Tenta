@@ -740,6 +740,13 @@ class ControlPlane:
         with self._lock:
             return dict(self._models[self._active_model_id])
 
+    def model(self, model_id: str) -> Dict[str, Any]:
+        with self._lock:
+            model = self._models.get(model_id)
+            if model is None:
+                raise KeyError(f"model '{model_id}' not found")
+            return dict(model)
+
     def models(self) -> Dict[str, Any]:
         with self._lock:
             models = [dict(self._models[mid]) for mid in self._model_order]

@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import unquote
 
 from .control_plane import ControlPlane
 from .database import RuntimeConfig, load_runtime_config, save_runtime_config
@@ -45,9 +46,12 @@ class ConsoleRoutes:
         path: str,
         body: Optional[Dict[str, Any]],
         query: Optional[Dict[str, List[str]]] = None,
+        request_context: Optional[Dict[str, Any]] = None,
     ) -> Result:
         body = body or {}
         query = query or {}
+        request_context = request_context or {}
+        base_url = str(request_context.get("base_url") or "http://127.0.0.1:8080").rstrip("/")
         actor_context = ActorContext.from_payload(
             body,
             default_actor="operator@console",
@@ -55,9 +59,9 @@ class ConsoleRoutes:
         )
         try:
             if method == "GET":
-                return self._get(path, query)
+                return self._get(path, query, base_url)
             if method == "POST":
-                return self._post(path, body, actor_context)
+                return self._post(path, body, actor_context, base_url)
         except GovernanceError as exc:
             return 403, {
                 "error": "forbidden",
@@ -75,9 +79,11 @@ class ConsoleRoutes:
         return None
 
     # ------------------------------------------------------------------
-    def _get(self, path: str, query: Dict[str, List[str]]) -> Result:
+    def _get(self, path: str, query: Dict[str, List[str]], base_url: str) -> Result:
         if path == "/v1/overview":
             return 200, self._overview()
+        if path == "/v1/serving-endpoint":
+            return 200, self._serving_endpoint(base_url)
         if path == "/v1/workloads":
             return 200, self.engine.workload_registry()
         if path == "/v1/workloads/active":
@@ -98,7 +104,10 @@ class ConsoleRoutes:
             workload_id = path[len("/v1/workloads/"):]
             return 200, self.engine.workload(workload_id)
         if path == "/v1/models":
-            return 200, self.cp.models()
+            return 200, self._models_payload(base_url)
+        if path.startswith("/v1/models/") and path.endswith("/endpoint"):
+            model_id = unquote(path[len("/v1/models/"):-len("/endpoint")])
+            return 200, self._serving_endpoint(base_url, model_id=model_id)
         if path == "/v1/healing/actions":
             return 200, self.cp.healing_actions()
         if path == "/v1/drift":
@@ -115,7 +124,13 @@ class ConsoleRoutes:
             return 200, self.cp.benchmarks(live_latencies=self._live_latencies())
         return None
 
-    def _post(self, path: str, body: Dict[str, Any], actor_context: ActorContext) -> Result:
+    def _post(
+        self,
+        path: str,
+        body: Dict[str, Any],
+        actor_context: ActorContext,
+        base_url: str,
+    ) -> Result:
         if path == "/v1/workloads/import":
             self._authorize(actor_context, "workload.import", target=str(body.get("workload_id") or "workload"))
             spec = body.get("spec")
@@ -182,34 +197,38 @@ class ConsoleRoutes:
         if path == "/v1/models/load":
             self._authorize(actor_context, "model.load", target=str(body.get("artifact_id") or ""))
             artifact_id = str(body.get("artifact_id") or "")
-            return 200, self.cp.load_model(
+            model = self.cp.load_model(
                 artifact_id,
                 actor=actor_context.actor,
                 operation_context=actor_context.to_dict(),
             )
+            return 200, self._decorate_model(model, base_url)
         if path == "/v1/models/upload":
             self._authorize(actor_context, "model.upload", target=str(body.get("model_id") or ""))
-            return 200, self.cp.upload_model(
+            model = self.cp.upload_model(
                 body,
                 actor=actor_context.actor,
                 operation_context=actor_context.to_dict(),
             )
+            return 200, self._decorate_model(model, base_url)
         if path == "/v1/models/rollback":
             self._authorize(actor_context, "model.rollback")
-            return 200, self.cp.rollback_model(
+            model = self.cp.rollback_model(
                 actor=actor_context.actor,
                 operation_context=actor_context.to_dict(),
             )
+            return 200, self._decorate_model(model, base_url)
         if path.startswith("/v1/models/") and path.endswith("/promote"):
-            model_id = path[len("/v1/models/"):-len("/promote")]
+            model_id = unquote(path[len("/v1/models/"):-len("/promote")])
             self._authorize(actor_context, "model.promote", target=model_id)
             stage = str(body.get("stage") or "shadow")
-            return 200, self.cp.promote_model(
+            model = self.cp.promote_model(
                 model_id,
                 stage,
                 actor=actor_context.actor,
                 operation_context=actor_context.to_dict(),
             )
+            return 200, self._decorate_model(model, base_url)
 
         if path == "/v1/drift/events":
             self._authorize(actor_context, "drift.ingest")
@@ -309,6 +328,55 @@ class ConsoleRoutes:
                 reason=actor_context.reason,
             )
             raise
+
+    def _models_payload(self, base_url: str) -> Dict[str, Any]:
+        payload = self.cp.models()
+        payload["models"] = [self._decorate_model(model, base_url) for model in payload["models"]]
+        payload["serving_endpoint"] = self._serving_endpoint(base_url)
+        return payload
+
+    def _decorate_model(self, model: Dict[str, Any], base_url: str) -> Dict[str, Any]:
+        response = dict(model)
+        response["serving_endpoint"] = self._serving_endpoint(base_url, model=response)
+        return response
+
+    def _serving_endpoint(
+        self,
+        base_url: str,
+        *,
+        model_id: Optional[str] = None,
+        model: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        active = self.cp.active_model()
+        selected = dict(model) if model is not None else None
+        if selected is None:
+            selected = self.cp.model(model_id) if model_id else active
+
+        is_champion = selected.get("model_id") == active.get("model_id") and selected.get("stage") == "champion"
+        endpoint_url = f"{base_url}/v1/decision-requests" if is_champion else None
+        return {
+            "model_id": selected.get("model_id"),
+            "model_version": selected.get("version"),
+            "stage": selected.get("stage"),
+            "status": "serving" if is_champion else "registered_not_serving",
+            "url": endpoint_url,
+            "endpoint_url": endpoint_url,
+            "method": "POST",
+            "content_type": "application/json",
+            "contract": "decision_request.v1",
+            "serving_mode": "governed_decision_runtime",
+            "workload_id": self.engine.workloads.active_id,
+            "health_url": f"{base_url}/v1/health",
+            "workload_url": f"{base_url}/v1/workloads/active",
+            "decision_lookup_url": f"{base_url}/v1/decision-requests/{{decision_request_id}}",
+            "promotion_url": f"{base_url}/v1/models/{selected.get('model_id')}/promote",
+            "notes": (
+                "Applications should call this governed decision endpoint. The Timber artifact "
+                "runs behind Tenta policy, audit, idempotency, workload validation, and rollback."
+                if is_champion
+                else "This model is registered but not the live champion. Promote it to champion to expose the app endpoint."
+            ),
+        }
 
     # ------------------------------------------------------------------
     def _live_latencies(self) -> List[float]:
