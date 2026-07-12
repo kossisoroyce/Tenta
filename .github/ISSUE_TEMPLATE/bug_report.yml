@@ -1,0 +1,52 @@
+name: Bug report
+description: Report a runtime, dashboard, API, CLI, storage, or documentation bug.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Tenta. Do not include secrets, production data, real decision records, or private model artifacts.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Runtime engine
+        - HTTP API
+        - CLI
+        - Dashboard
+        - Workloads
+        - Storage / database provisioning
+        - Audit / governance
+        - Docs / packaging
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Steps, command, payload shape, or test case that reproduces the issue.
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python, Node/pnpm, browser, database backend, and Tenta commit/version.
+    validations:
+      required: false

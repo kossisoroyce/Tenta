@@ -1,0 +1,98 @@
+{
+  "workload_id": "payment_fraud",
+  "name": "Payment Fraud",
+  "version": "0.1.0",
+  "domain": "payments",
+  "status": "example",
+  "description": "Compatibility workload for payment fraud scoring clients and fraud-specific feature names.",
+  "request_aliases": {
+    "decision_request_id": ["transaction_id", "request_id"],
+    "subject_id": ["account_id", "cardholder_id"],
+    "context_id": ["merchant_id"],
+    "value": ["amount"],
+    "requested_at": ["event_time"]
+  },
+  "policy": {
+    "version": "fraud-policy-0.1.0",
+    "review_threshold": 0.65,
+    "block_threshold": 0.85
+  },
+  "features": [
+    {
+      "name": "merchant_risk",
+      "label": "Merchant risk",
+      "type": "number",
+      "aliases": ["entity_risk"],
+      "default": 0.25,
+      "description": "Normalized merchant risk score."
+    },
+    {
+      "name": "velocity_10m",
+      "label": "Transaction velocity",
+      "type": "number",
+      "aliases": ["transaction_velocity_10m"],
+      "default": 0,
+      "description": "Transaction count or intensity in the last ten minutes."
+    },
+    {
+      "name": "account_age_days",
+      "label": "Account age",
+      "type": "number",
+      "aliases": ["subject_age_days"],
+      "default": 90,
+      "description": "Cardholder or account age in days."
+    },
+    {
+      "name": "chargeback_count",
+      "label": "Chargebacks",
+      "type": "number",
+      "aliases": ["prior_adverse_events"],
+      "default": 0,
+      "description": "Prior chargebacks or payment disputes."
+    },
+    {
+      "name": "is_high_risk_country",
+      "label": "High-risk country",
+      "type": "boolean",
+      "aliases": ["high_risk_segment"],
+      "default": false,
+      "description": "Whether the transaction country is marked high risk."
+    }
+  ],
+  "reason_rules": [
+    { "feature": "merchant_risk", "impact_gte": 0.25, "reason_code": "merchant_risk_high" },
+    { "feature": "velocity_10m", "impact_gte": 0.1, "reason_code": "velocity_high" },
+    { "feature": "amount", "impact_gte": 0.12, "reason_code": "amount_high" },
+    { "feature": "is_high_risk_country", "value_equals": true, "reason_code": "high_risk_country" }
+  ],
+  "reason_labels": {
+    "score_above_block_threshold": "Fraud score crossed the block threshold",
+    "score_above_review_threshold": "Fraud score crossed the review threshold",
+    "score_below_review_threshold": "Fraud score stayed below the review threshold",
+    "merchant_risk_high": "Merchant risk is elevated",
+    "velocity_high": "Transaction velocity is elevated",
+    "amount_high": "Transaction amount is high",
+    "high_risk_country": "Transaction country is high risk"
+  },
+  "outcome_labels": {
+    "adverse": "Confirmed fraud",
+    "expected": "Confirmed legitimate"
+  },
+  "sample_payload": {
+    "decision_request_id": "pay-sample",
+    "workload_id": "payment_fraud",
+    "subject_id": "acct-sample",
+    "context_id": "merchant-sample",
+    "value": 120,
+    "currency": "USD",
+    "channel": "web",
+    "requested_at": "2026-07-11T12:00:00Z",
+    "features": {
+      "merchant_risk": 0.2,
+      "velocity_10m": 2,
+      "account_age_days": 180,
+      "chargeback_count": 0,
+      "is_high_risk_country": false
+    }
+  }
+}

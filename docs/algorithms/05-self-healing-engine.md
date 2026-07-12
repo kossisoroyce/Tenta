@@ -9,7 +9,7 @@ The self-healing engine converts drift signals, performance signals, and operati
 - Confidence distribution changes.
 - Segment-level false positive and false negative trends.
 - Runtime errors, latency spikes, and fallback rates.
-- Analyst feedback and confirmed fraud labels.
+- Analyst feedback, reviewer feedback, delayed labels, and confirmed outcomes.
 
 ## Healing Actions
 
@@ -24,6 +24,11 @@ The self-healing engine converts drift signals, performance signals, and operati
 
 Every healing action is a proposal until the policy engine approves it. Some actions can be auto-approved under strict bounds. High-risk actions require human approval.
 
+Approved actions execute through bounded effect handlers. The initial executor
+supports threshold moves, manual-review overlays, fallback traffic controls,
+shadow-scoring toggles, and online-learning toggles. Every execution records the
+before/after effect and rollback criteria.
+
 ## Control Loop
 
 1. Aggregate signals.
@@ -33,4 +38,3 @@ Every healing action is a proposal until the policy engine approves it. Some act
 5. Submit action to the policy engine.
 6. Execute approved action.
 7. Monitor outcome and rollback criteria.
-

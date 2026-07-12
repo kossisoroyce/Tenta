@@ -1,0 +1,56 @@
+{
+  "cases": [
+    {
+      "case_id": "payment-fraud-low-allow",
+      "workload_id": "payment_fraud",
+      "payload": {
+        "decision_request_id": "replay-payment-fraud-low",
+        "workload_id": "payment_fraud",
+        "subject_id": "acct-replay-low",
+        "context_id": "merchant-replay-low",
+        "value": 120,
+        "currency": "USD",
+        "channel": "web",
+        "requested_at": "2026-07-11T12:00:00Z",
+        "features": {
+          "merchant_risk": 0.1,
+          "velocity_10m": 1,
+          "account_age_days": 400,
+          "chargeback_count": 0,
+          "is_high_risk_country": false
+        }
+      },
+      "expected": {
+        "decision": "allow",
+        "workload_id": "payment_fraud",
+        "policy_version": "fraud-policy-0.1.0"
+      }
+    },
+    {
+      "case_id": "payment-fraud-high-block",
+      "workload_id": "payment_fraud",
+      "payload": {
+        "decision_request_id": "replay-payment-fraud-high",
+        "workload_id": "payment_fraud",
+        "subject_id": "acct-replay-high",
+        "context_id": "merchant-replay-high",
+        "value": 9000,
+        "currency": "USD",
+        "channel": "web",
+        "requested_at": "2026-07-11T12:01:00Z",
+        "features": {
+          "merchant_risk": 0.98,
+          "velocity_10m": 30,
+          "account_age_days": 2,
+          "chargeback_count": 5,
+          "is_high_risk_country": true
+        }
+      },
+      "expected": {
+        "decision": "block",
+        "workload_id": "payment_fraud",
+        "policy_version": "fraud-policy-0.1.0"
+      }
+    }
+  ]
+}

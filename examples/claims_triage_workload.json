@@ -1,0 +1,96 @@
+{
+  "workload_id": "claims_triage",
+  "name": "Claims Triage",
+  "version": "0.1.0",
+  "domain": "insurance",
+  "status": "draft",
+  "description": "Example workload for routing insurance claims to approve, review, or block decisions.",
+  "request_aliases": {
+    "decision_request_id": ["claim_request_id", "request_id"],
+    "subject_id": ["policyholder_id", "entity_id"],
+    "context_id": ["claim_type", "application_id"],
+    "value": ["claim_amount"],
+    "requested_at": ["event_time"]
+  },
+  "policy": {
+    "version": "claims-policy-0.1.0",
+    "review_threshold": 0.55,
+    "block_threshold": 0.82
+  },
+  "features": [
+    {
+      "name": "merchant_risk",
+      "label": "Claim risk",
+      "type": "number",
+      "aliases": ["claim_risk", "subject_risk"],
+      "default": 0.25,
+      "description": "Normalized risk score for the claim or claimant."
+    },
+    {
+      "name": "velocity_10m",
+      "label": "Recent claim velocity",
+      "type": "number",
+      "aliases": ["recent_claim_velocity", "activity_velocity_10m"],
+      "default": 0,
+      "description": "Recent claim activity count or intensity."
+    },
+    {
+      "name": "account_age_days",
+      "label": "Policy age",
+      "type": "number",
+      "aliases": ["policy_age_days", "subject_age_days"],
+      "default": 365,
+      "description": "Age of the policy or subject relationship in days."
+    },
+    {
+      "name": "chargeback_count",
+      "label": "Prior adverse outcomes",
+      "type": "number",
+      "aliases": ["prior_denials", "prior_adverse_events"],
+      "default": 0,
+      "description": "Count of prior adverse outcomes, reversals, or escalations."
+    },
+    {
+      "name": "is_high_risk_country",
+      "label": "High-risk segment",
+      "type": "boolean",
+      "aliases": ["high_risk_segment", "sensitive_segment"],
+      "default": false,
+      "description": "Whether the claim is in a segment requiring extra review."
+    }
+  ],
+  "reason_rules": [
+    { "feature": "merchant_risk", "impact_gte": 0.25, "reason_code": "claim_risk_high" },
+    { "feature": "velocity_10m", "impact_gte": 0.1, "reason_code": "claim_velocity_high" },
+    { "feature": "amount", "impact_gte": 0.12, "reason_code": "claim_value_high" }
+  ],
+  "reason_labels": {
+    "score_above_block_threshold": "Score crossed the block threshold",
+    "score_above_review_threshold": "Score crossed the review threshold",
+    "score_below_review_threshold": "Score stayed below the review threshold",
+    "claim_risk_high": "Claim risk is elevated",
+    "claim_velocity_high": "Recent claim activity is elevated",
+    "claim_value_high": "Claim value is high"
+  },
+  "outcome_labels": {
+    "adverse": "Adverse outcome",
+    "expected": "Expected outcome"
+  },
+  "sample_payload": {
+    "claim_request_id": "claim-example-001",
+    "workload_id": "claims_triage",
+    "policyholder_id": "policyholder-example",
+    "claim_type": "auto",
+    "claim_amount": 2400,
+    "currency": "USD",
+    "channel": "api",
+    "event_time": "2026-07-11T12:00:00Z",
+    "features": {
+      "claim_risk": 0.32,
+      "recent_claim_velocity": 1,
+      "policy_age_days": 420,
+      "prior_denials": 0,
+      "high_risk_segment": false
+    }
+  }
+}

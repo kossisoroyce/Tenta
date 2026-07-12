@@ -1,0 +1,13 @@
+{
+  "backend": "postgres",
+  "storage_url": "postgresql://tenta:tenta@127.0.0.1:5432/tenta",
+  "compose_file": "compose.yaml",
+  "service": "postgres",
+  "start": true,
+  "wait": true,
+  "persist": true,
+  "actor": "operator@example.com",
+  "role": "admin",
+  "source": "api",
+  "reason": "Provision local durable storage for runtime audit and memory."
+}

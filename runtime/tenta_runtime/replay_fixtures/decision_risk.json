@@ -1,0 +1,56 @@
+{
+  "cases": [
+    {
+      "case_id": "decision-risk-low-allow",
+      "workload_id": "decision_risk",
+      "payload": {
+        "decision_request_id": "replay-decision-risk-low",
+        "workload_id": "decision_risk",
+        "subject_id": "subject-replay-low",
+        "context_id": "reference-workload",
+        "value": 120,
+        "currency": "USD",
+        "channel": "api",
+        "requested_at": "2026-07-11T12:00:00Z",
+        "features": {
+          "entity_risk": 0.1,
+          "velocity_10m": 1,
+          "subject_age_days": 400,
+          "prior_adverse_events": 0,
+          "high_risk_segment": false
+        }
+      },
+      "expected": {
+        "decision": "allow",
+        "workload_id": "decision_risk",
+        "policy_version": "policy-baseline-0.1.0"
+      }
+    },
+    {
+      "case_id": "decision-risk-high-block",
+      "workload_id": "decision_risk",
+      "payload": {
+        "decision_request_id": "replay-decision-risk-high",
+        "workload_id": "decision_risk",
+        "subject_id": "subject-replay-high",
+        "context_id": "reference-workload",
+        "value": 9000,
+        "currency": "USD",
+        "channel": "api",
+        "requested_at": "2026-07-11T12:01:00Z",
+        "features": {
+          "entity_risk": 0.98,
+          "velocity_10m": 30,
+          "subject_age_days": 2,
+          "prior_adverse_events": 5,
+          "high_risk_segment": true
+        }
+      },
+      "expected": {
+        "decision": "block",
+        "workload_id": "decision_risk",
+        "policy_version": "policy-baseline-0.1.0"
+      }
+    }
+  ]
+}

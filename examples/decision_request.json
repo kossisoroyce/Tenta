@@ -1,0 +1,17 @@
+{
+  "decision_request_id": "req-example-001",
+  "workload_id": "decision_risk",
+  "subject_id": "subject-example",
+  "context_id": "reference-workload",
+  "value": 120,
+  "currency": "USD",
+  "channel": "api",
+  "requested_at": "2026-07-11T12:00:00Z",
+  "features": {
+    "entity_risk": 0.2,
+    "velocity_10m": 2,
+    "subject_age_days": 180,
+    "prior_adverse_events": 0,
+    "high_risk_segment": false
+  }
+}

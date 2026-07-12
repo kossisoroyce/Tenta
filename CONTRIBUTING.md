@@ -1,26 +1,65 @@
 # Contributing
 
-Thanks for helping build the Self-Healing ML Platform.
+Thanks for helping build Tenta. The project is a pre-release Decision Runtime,
+so contributions should prioritize correctness, auditability, and operator
+trust over novelty.
+
+## Useful First Areas
+
+- Runtime tests for decision, workload, audit, storage, and governance behavior.
+- Workload packs and replay fixtures for new high-stakes decision domains.
+- Dashboard polish that maps directly to runtime/control-plane API capabilities.
+- Packaging, installation, and deployment improvements.
+- Documentation that makes the engine easier to run, extend, and operate.
+
+## Local Development
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+python3 -m unittest discover -s tests
+```
+
+Dashboard:
+
+```bash
+cd dashboard
+pnpm install
+pnpm build
+```
+
+Run both together:
+
+```bash
+tenta serve --host 127.0.0.1 --port 8080
+```
 
 ## Contribution Principles
 
-- Keep fraud detection safety, auditability, and operational reliability ahead of novelty.
-- Do not commit real customer data, card data, account data, personally identifiable information, secrets, or production model artifacts.
+- Keep decision safety, auditability, and operational reliability ahead of
+  feature breadth.
+- Do not commit real customer, patient, account, card, claim, security,
+  identity, or production model data.
 - Prefer synthetic, anonymized, or tokenized datasets for examples and tests.
-- Document every behavior that changes model decisions, thresholds, healing actions, or policy enforcement.
+- Document behavior that changes decisions, thresholds, healing actions,
+  workload validation, storage, or policy enforcement.
+- Make failure modes visible through API responses, audit events, metrics, and
+  tests.
+- Keep model adaptation paths observable, reversible, and role-gated.
 
-## Workflow
+## Pull Request Checklist
 
-1. Open an issue or design note for significant changes.
-2. Keep pull requests focused on one capability or document area.
-3. Add or update tests for runtime, model wrapper, drift detection, policy, and API behavior.
-4. Update documentation when changing public APIs, deployment configuration, or safety controls.
-5. Include benchmark notes for changes that affect latency, throughput, or memory use.
+- Add or update tests for runtime behavior touched by the change.
+- Update docs when changing public APIs, CLI commands, storage behavior,
+  workload specs, dashboard routes, or safety controls.
+- Include migration notes for schema or persisted-state changes.
+- Keep generated local state out of Git: `data/`, `audit/`, `dashboard/dist/`,
+  and `node_modules/` are intentionally ignored.
+- For dashboard work, run `pnpm build` and verify the UI against the runtime API.
 
-## Code Quality
+## Security And Misuse
 
-- Favor explicit contracts over implicit model behavior.
-- Keep model adaptation paths observable and reversible.
-- Make failure modes visible through logs, metrics, and audit events.
-- Use deterministic tests where possible and bounded stochastic tests where needed.
-
+Do not include exploit instructions, bypass logic, secrets, production
+credentials, or real decision records in issues, examples, tests, or pull
+requests. Report sensitive concerns privately according to [SECURITY.md](SECURITY.md).

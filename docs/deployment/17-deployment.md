@@ -12,7 +12,7 @@ Deployment should support repeatable promotion from development to staging to pr
 ## Deployment Steps
 
 1. Build runtime, controller, dashboard, and plugin artifacts.
-2. Compile the fraud model with Timber into a signed C99 artifact and run the parity check against the source model.
+2. Compile the production model with Timber into a signed C99 artifact and run the parity check against the source model.
 3. Run unit and integration tests.
 4. Run replay evaluation for model and policy changes against the Timber-compiled artifact.
 5. Deploy to staging.
@@ -23,4 +23,3 @@ Deployment should support repeatable promotion from development to staging to pr
 ## Rollback
 
 Every deployment must define rollback behavior for model artifacts, policy versions, runtime services, and healing actions. Because Timber artifacts are immutable and content-addressed by hash, rollback is a repoint to the previous known-good signed artifact — no rebuild required.
-

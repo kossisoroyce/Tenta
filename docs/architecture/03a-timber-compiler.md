@@ -1,10 +1,15 @@
 # 03a - Timber Compiler Integration
 
-The platform uses [Timber](https://github.com/kossisoroyce/timber) as the ahead-of-time (AOT) compiler for all production fraud models. Timber compiles classical ML models — XGBoost, LightGBM, scikit-learn, CatBoost, ONNX — into signed, dependency-free C99 inference code that the runtime loads and calls directly.
+The platform is designed to use [Timber](https://github.com/kossisoroyce/timber)
+as the ahead-of-time (AOT) compiler for production classical ML models. Timber
+compiles XGBoost, LightGBM, scikit-learn, CatBoost, and ONNX models into signed,
+dependency-free C99 inference code that the runtime loads and calls directly.
 
 ## Why Timber Fits This Platform
 
-Fraud detection in high-frequency transaction systems is dominated by tree ensembles and linear models, exactly the model families Timber targets. The platform's constraints and Timber's strengths overlap tightly:
+High-volume decision systems often rely on tree ensembles and linear models,
+exactly the model families Timber targets. The platform's constraints and
+Timber's strengths overlap tightly:
 
 | Platform constraint | Timber capability |
 |---|---|
@@ -76,5 +81,7 @@ For regulated deployments (payments, banking, insurance underwriting), the Timbe
 
 ## Non-Goals
 
-- Timber is not used for deep-learning fraud models. If a future model requires DL, it is served through a separate wrapper implementation; the rest of the platform (memory, drift, policy, healing) is unchanged.
+- Timber is not used for deep-learning models. If a workload requires DL, it is
+  served through a separate wrapper implementation; the rest of the platform
+  (memory, drift, policy, healing) is unchanged.
 - Timber is not the training system. It is invoked only after training is complete and validation has passed.

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en" data-theme="kumo">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/dashboard/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/dashboard/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/dashboard/apple-touch-icon.png" />
+    <title>Tenta — Decision Runtime</title>
+    <script>
+      // Match the system colour scheme before first paint to avoid a flash.
+      (function () {
+        try {
+          var dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          document.documentElement.dataset.mode = dark ? "dark" : "light";
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

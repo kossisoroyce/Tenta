@@ -5,10 +5,10 @@ Drift detection identifies when production data or model behavior diverges from 
 ## Drift Types
 
 - Feature drift: input feature distributions change.
-- Label drift: fraud outcome distributions change.
-- Concept drift: the relationship between features and fraud changes.
+- Label drift: outcome distributions change.
+- Concept drift: the relationship between features and outcomes changes.
 - Confidence drift: model confidence distribution changes.
-- Segment drift: drift appears in a merchant, geography, account age, channel, or device segment.
+- Segment drift: drift appears in a subject, context, geography, age, channel, device, or workload-specific segment.
 
 ## Candidate Detectors
 
@@ -22,4 +22,3 @@ Drift detection identifies when production data or model behavior diverges from 
 ## Alert Requirements
 
 Alerts should include affected segment, detector name, baseline window, current window, severity, confidence, and recommended next action.
-

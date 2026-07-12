@@ -1,13 +1,15 @@
 # 18 - Roadmap
 
-The research roadmap focuses on proving that self-healing behavior improves fraud outcomes without creating unacceptable operational or compliance risk.
+The research roadmap focuses on proving that adaptive runtime behavior improves
+decision outcomes without creating unacceptable operational, safety, or
+compliance risk.
 
 ## Near-Term Research
 
 - Compare drift detectors on synthetic and historical streams.
 - Evaluate delayed labels and feedback quality.
 - Define benchmark datasets and traffic simulators.
-- Study threshold adaptation under different fraud-rate shifts.
+- Study threshold adaptation under different outcome-rate shifts.
 
 ## Mid-Term Research
 
@@ -18,8 +20,7 @@ The research roadmap focuses on proving that self-healing behavior improves frau
 
 ## Long-Term Research
 
-- Causal analysis for fraud decision changes.
+- Causal analysis for decision changes.
 - Multi-model ensemble healing.
 - Continual learning under strict compliance constraints.
 - Cross-institution learning with privacy-preserving methods.
-

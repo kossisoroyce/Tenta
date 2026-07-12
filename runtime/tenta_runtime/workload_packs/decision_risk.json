@@ -1,0 +1,98 @@
+{
+  "workload_id": "decision_risk",
+  "name": "Decision Risk",
+  "version": "0.1.0",
+  "domain": "general",
+  "status": "active",
+  "description": "Generic high-stakes decision risk workload for approvals, triage, compliance, and safety decisions.",
+  "request_aliases": {
+    "decision_request_id": ["transaction_id", "request_id"],
+    "subject_id": ["account_id", "entity_id"],
+    "context_id": ["merchant_id", "application_id"],
+    "value": ["amount"],
+    "requested_at": ["event_time"]
+  },
+  "policy": {
+    "version": "policy-baseline-0.1.0",
+    "review_threshold": 0.65,
+    "block_threshold": 0.85
+  },
+  "features": [
+    {
+      "name": "merchant_risk",
+      "label": "Entity risk",
+      "type": "number",
+      "aliases": ["entity_risk", "subject_risk"],
+      "default": 0.25,
+      "description": "Normalized risk of the entity, subject, counterparty, or context."
+    },
+    {
+      "name": "velocity_10m",
+      "label": "Recent velocity",
+      "type": "number",
+      "aliases": ["activity_velocity_10m", "request_velocity_10m"],
+      "default": 0,
+      "description": "Recent activity count or intensity in a ten-minute window."
+    },
+    {
+      "name": "account_age_days",
+      "label": "Subject age",
+      "type": "number",
+      "aliases": ["subject_age_days", "entity_age_days"],
+      "default": 90,
+      "description": "Age of the subject, account, or entity in days."
+    },
+    {
+      "name": "chargeback_count",
+      "label": "Prior adverse events",
+      "type": "number",
+      "aliases": ["prior_adverse_events", "adverse_event_count"],
+      "default": 0,
+      "description": "Count of prior adverse labels, disputes, incidents, or policy breaks."
+    },
+    {
+      "name": "is_high_risk_country",
+      "label": "High-risk segment",
+      "type": "boolean",
+      "aliases": ["high_risk_segment", "sensitive_segment"],
+      "default": false,
+      "description": "Whether the request belongs to a segment requiring extra care."
+    }
+  ],
+  "reason_rules": [
+    { "feature": "merchant_risk", "impact_gte": 0.25, "reason_code": "merchant_risk_high" },
+    { "feature": "velocity_10m", "impact_gte": 0.1, "reason_code": "velocity_high" },
+    { "feature": "amount", "impact_gte": 0.12, "reason_code": "amount_high" },
+    { "feature": "is_high_risk_country", "value_equals": true, "reason_code": "high_risk_country" }
+  ],
+  "reason_labels": {
+    "score_above_block_threshold": "Score crossed the block threshold",
+    "score_above_review_threshold": "Score crossed the review threshold",
+    "score_below_review_threshold": "Score stayed below the review threshold",
+    "merchant_risk_high": "Entity risk is elevated",
+    "velocity_high": "Recent velocity is elevated",
+    "amount_high": "Request value is high",
+    "high_risk_country": "Request is in a high-risk segment"
+  },
+  "outcome_labels": {
+    "adverse": "Adverse outcome",
+    "expected": "Expected outcome"
+  },
+  "sample_payload": {
+    "decision_request_id": "req-sample",
+    "workload_id": "decision_risk",
+    "subject_id": "subject-sample",
+    "context_id": "reference-workload",
+    "value": 120,
+    "currency": "USD",
+    "channel": "api",
+    "requested_at": "2026-07-11T12:00:00Z",
+    "features": {
+      "entity_risk": 0.2,
+      "velocity_10m": 2,
+      "subject_age_days": 180,
+      "prior_adverse_events": 0,
+      "high_risk_segment": false
+    }
+  }
+}
