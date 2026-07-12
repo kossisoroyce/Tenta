@@ -40,7 +40,7 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-postgres = ["psycopg[binary]>=3.1"]
+postgres = ["psycopg[binary]>=3.3.4"]
 
 [project.urls]
 Homepage = "https://github.com/kossisoroyce/Tenta"
