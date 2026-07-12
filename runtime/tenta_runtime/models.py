@@ -6,8 +6,9 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Mapping, Optional, Protocol
+from typing import Any, Dict, List, Mapping, Optional, Protocol, Union
 
+from .artifacts import TimberArtifactManifest
 from .workloads import DEFAULT_WORKLOAD_ID, WorkloadSpec
 
 
@@ -207,6 +208,61 @@ class RuleBasedModelWrapper:
             "model_version": self.model_version,
             "backend": "rule_based",
             "artifact_hash": None,
+        }
+
+
+class TimberModelWrapper:
+    """Model wrapper backed by a validated Timber artifact manifest.
+
+    The first implementation supports a deterministic local predictor mode for
+    replay and promotion gates. Native Timber ABI dispatch can be plugged in by
+    replacing the predictor mode without changing the runtime contract.
+    """
+
+    def __init__(self, manifest: Union[TimberArtifactManifest, Mapping[str, Any]]) -> None:
+        if isinstance(manifest, TimberArtifactManifest):
+            self.manifest = manifest
+        else:
+            self.manifest = TimberArtifactManifest.from_mapping(manifest)
+        self.model_id = self.manifest.model_id
+        self.model_version = self.manifest.version
+        self._base = RuleBasedModelWrapper()
+
+    def predict(self, request: ScoringRequest) -> ModelPrediction:
+        predictor = str(self.manifest.runtime.get("predictor") or "rule_based").strip().lower()
+        if predictor not in {"rule_based", "timber_shim"}:
+            raise RuntimeError(
+                f"Timber predictor '{predictor}' is not available in this runtime; "
+                "register a native adapter before promotion"
+            )
+        base = self._base.predict(request)
+        score = _clamp(base.score * self.manifest.score_gain + self.manifest.score_bias)
+        confidence = round(_clamp(0.5 + abs(score - 0.5)), 4)
+        explanations = [
+            {"feature": item["feature"], "impact": round(item["impact"] * self.manifest.score_gain, 4)}
+            for item in base.explanations
+        ]
+        return ModelPrediction(
+            model_id=self.model_id,
+            model_version=self.model_version,
+            score=round(score, 6),
+            confidence=confidence,
+            features_used=base.features_used,
+            explanations=explanations,
+        )
+
+    def health(self) -> Dict[str, Any]:
+        validation = self.manifest.validation_report()
+        return {
+            "status": "healthy" if validation["valid"] else "degraded",
+            "model_id": self.model_id,
+            "model_version": self.model_version,
+            "backend": "timber",
+            "artifact_hash": self.manifest.artifact_sha256,
+            "signature": self.manifest.signature,
+            "signature_status": self.manifest.signature_status,
+            "predictor": self.manifest.runtime.get("predictor", "rule_based"),
+            "validation": validation,
         }
 
 

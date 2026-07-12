@@ -22,6 +22,24 @@ The same payload can be sent through the CLI:
 tenta decide --payload examples/decision_request.json --url http://127.0.0.1:8080
 ```
 
+## Timber Model Registration
+
+`decision-risk-v14.tenta.json` is a local Timber manifest fixture. The runtime
+verifies the referenced artifact hash, signature metadata, active workload
+feature contract, and replay pack before promotion.
+
+```bash
+tenta model register examples/decision-risk-v14.tenta.json --url http://127.0.0.1:8080
+tenta model promote decision-risk-xgb-v14 --stage champion --url http://127.0.0.1:8080
+tenta endpoint --url http://127.0.0.1:8080
+```
+
+After promotion, applications keep calling the governed decision endpoint:
+
+```text
+POST http://127.0.0.1:8080/v1/decision-requests
+```
+
 ## Workload Import
 
 `claims_triage_workload.json` shows how a domain pack can remap request fields,

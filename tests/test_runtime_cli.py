@@ -18,6 +18,7 @@ from tenta_runtime import (  # noqa: E402
     InMemoryControlPlaneStore,
     RuleBasedModelWrapper,
     RuntimeEngine,
+    sha256_file,
 )
 from tenta_runtime.api import make_handler  # noqa: E402
 from tenta_runtime.cli import _build_parser, main as cli_main  # noqa: E402
@@ -73,6 +74,7 @@ class RuntimeCliTests(unittest.TestCase):
         self.assertIn("endpoint", help_text)
         self.assertIn("decide", help_text)
         self.assertIn("score", help_text)
+        self.assertIn("model", help_text)
         self.assertIn("workload", help_text)
         self.assertIn("replay", help_text)
         self.assertIn("audit", help_text)
@@ -235,6 +237,41 @@ class RuntimeCliTests(unittest.TestCase):
         self.assertEqual(import_payload["workload"]["workload_id"], "decision_risk_cli_variant")
         self.assertEqual(import_payload["active"]["workload_id"], "decision_risk_cli_variant")
 
+    def test_model_register_promote_and_endpoint_commands(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manifest_path = self._write_manifest(Path(temp_dir), "decision-risk-cli-v14")
+
+            register_output = self._run_cli(
+                "model",
+                "register",
+                str(manifest_path),
+                "--url",
+                self.base_url,
+            )
+            register_payload = json.loads(register_output)
+
+            self.assertEqual(register_payload["model_id"], "decision-risk-cli-v14")
+            self.assertEqual(register_payload["stage"], "candidate")
+            self.assertTrue(register_payload["artifact_validation"]["valid"])
+
+            promote_output = self._run_cli(
+                "model",
+                "promote",
+                "decision-risk-cli-v14",
+                "--stage",
+                "champion",
+                "--url",
+                self.base_url,
+            )
+            promote_payload = json.loads(promote_output)
+            endpoint_output = self._run_cli("model", "endpoint", "--url", self.base_url)
+            endpoint_payload = json.loads(endpoint_output)
+
+        self.assertEqual(promote_payload["stage"], "champion")
+        self.assertEqual(promote_payload["promotion_gate"]["status"], "passed")
+        self.assertEqual(endpoint_payload["model_id"], "decision-risk-cli-v14")
+        self.assertEqual(endpoint_payload["url"], f"{self.base_url}/v1/decision-requests")
+
     def test_replay_run_command(self):
         output = self._run_cli("replay", "run", "--url", self.base_url)
         payload = json.loads(output)
@@ -313,6 +350,48 @@ class RuntimeCliTests(unittest.TestCase):
         with contextlib.redirect_stdout(stream):
             cli_main(list(args))
         return stream.getvalue()
+
+    def _write_manifest(self, directory, model_id):
+        artifact_path = directory / f"{model_id}.timber"
+        artifact_path.write_text("timber artifact fixture\n", encoding="utf-8")
+        manifest_path = directory / f"{model_id}.tenta.json"
+        manifest = {
+            "schema_version": "tenta.timber-manifest.v1",
+            "model": {
+                "model_id": model_id,
+                "version": "14.0.0",
+                "backend": "timber",
+                "trained_on": "2026-07-12",
+            },
+            "artifact": {
+                "path": artifact_path.name,
+                "sha256": sha256_file(artifact_path),
+                "signature": "ed25519:verified",
+                "signature_status": "verified",
+            },
+            "feature_contract": {
+                "workload_id": "decision_risk",
+                "features": [
+                    "merchant_risk",
+                    "velocity_10m",
+                    "account_age_days",
+                    "chargeback_count",
+                    "is_high_risk_country",
+                ],
+            },
+            "metrics": {
+                "auc": 0.978,
+                "pr_auc": 0.862,
+                "fpr": 0.008,
+                "recall": 0.904,
+                "precision": 0.924,
+                "p99_latency_ms": 5.8,
+            },
+            "scoring": {"score_gain": 1.0, "score_bias": 0.0},
+            "runtime": {"predictor": "rule_based"},
+        }
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        return manifest_path
 
 
 if __name__ == "__main__":

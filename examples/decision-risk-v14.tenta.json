@@ -1,0 +1,40 @@
+{
+  "schema_version": "tenta.timber-manifest.v1",
+  "model": {
+    "model_id": "decision-risk-xgb-v14",
+    "version": "14.0.0",
+    "backend": "timber",
+    "trained_on": "2026-07-12"
+  },
+  "artifact": {
+    "path": "artifacts/decision-risk-v14.timber",
+    "sha256": "3f33318800489634c3de829347643749b456af21ec8ef1d3605049377808d02f",
+    "signature": "ed25519:verified",
+    "signature_status": "verified"
+  },
+  "feature_contract": {
+    "workload_id": "decision_risk",
+    "features": [
+      "merchant_risk",
+      "velocity_10m",
+      "account_age_days",
+      "chargeback_count",
+      "is_high_risk_country"
+    ]
+  },
+  "metrics": {
+    "auc": 0.978,
+    "pr_auc": 0.862,
+    "fpr": 0.008,
+    "recall": 0.904,
+    "precision": 0.924,
+    "p99_latency_ms": 5.8
+  },
+  "scoring": {
+    "score_gain": 1.0,
+    "score_bias": 0.0
+  },
+  "runtime": {
+    "predictor": "rule_based"
+  }
+}

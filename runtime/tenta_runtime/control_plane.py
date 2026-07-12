@@ -17,8 +17,10 @@ import hashlib
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
+from .artifacts import TimberArtifactManifest
 from .control_plane_store import ControlPlaneStore
 from .governance import infer_role
 from .integrity import verify_control_plane_store
@@ -747,6 +749,24 @@ class ControlPlane:
                 raise KeyError(f"model '{model_id}' not found")
             return dict(model)
 
+    def update_model_checks(
+        self,
+        model_id: str,
+        *,
+        artifact_validation: Optional[Dict[str, Any]] = None,
+        workload_compatibility: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        with self._lock:
+            model = self._models.get(model_id)
+            if model is None:
+                raise KeyError(f"model '{model_id}' not found")
+            if artifact_validation is not None:
+                model["artifact_validation"] = dict(artifact_validation)
+            if workload_compatibility is not None:
+                model["workload_compatibility"] = dict(workload_compatibility)
+            self._persist()
+            return dict(model)
+
     def models(self) -> Dict[str, Any]:
         with self._lock:
             models = [dict(self._models[mid]) for mid in self._model_order]
@@ -815,6 +835,65 @@ class ControlPlane:
             )
             return dict(record)
 
+    def register_model_manifest(
+        self,
+        spec: Dict[str, Any],
+        *,
+        manifest_path: Optional[str] = None,
+        artifact_validation: Optional[Dict[str, Any]] = None,
+        workload_compatibility: Optional[Dict[str, Any]] = None,
+        actor: str = "operator",
+        operation_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        manifest = TimberArtifactManifest.from_mapping(
+            spec,
+            manifest_path=Path(manifest_path) if manifest_path else None,
+        )
+        validation = artifact_validation or manifest.validation_report()
+        if not validation.get("valid"):
+            raise ValueError("artifact manifest is invalid: " + "; ".join(validation.get("errors") or []))
+        with self._lock:
+            if manifest.model_id in self._models:
+                raise ValueError(f"model '{manifest.model_id}' is already registered")
+            record = manifest.model_record(
+                artifact_validation=validation,
+                workload_compatibility=workload_compatibility or {"status": "pending", "valid": False},
+                created_at=_iso(_now()),
+            )
+            self._models[manifest.model_id] = record
+            self._model_order.append(manifest.model_id)
+            self._record_policy(
+                change=f"Registered Timber artifact {manifest.model_id} {manifest.version} (candidate)",
+                kind="model_register",
+                before={"registered": False},
+                after={
+                    "stage": "candidate",
+                    "artifact_hash": manifest.artifact_sha256,
+                    "signature_status": manifest.signature_status,
+                },
+                approved_by="policy-engine (auto)",
+                approval_type="auto",
+            )
+            self._record_operation_unlocked(
+                operation_type="model.register",
+                actor=actor,
+                target=manifest.model_id,
+                request={
+                    "model_id": manifest.model_id,
+                    "version": manifest.version,
+                    "manifest_path": manifest_path,
+                    "artifact_path": manifest.artifact_path,
+                },
+                result={
+                    "model_id": manifest.model_id,
+                    "stage": record["stage"],
+                    "artifact_hash": manifest.artifact_sha256,
+                    "compatibility": dict(record["workload_compatibility"]),
+                },
+                **_operation_context(operation_context),
+            )
+            return dict(record)
+
     def upload_model(
         self,
         spec: Dict[str, Any],
@@ -874,6 +953,7 @@ class ControlPlane:
         target_stage: str,
         actor: str = "operator",
         operation_context: Optional[Dict[str, Any]] = None,
+        promotion_gate: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         valid = {"shadow", "champion"}
         if target_stage not in valid:
@@ -882,6 +962,10 @@ class ControlPlane:
             model = self._models.get(model_id)
             if model is None:
                 raise KeyError(f"model '{model_id}' not found")
+            if promotion_gate is not None:
+                model["promotion_gate"] = dict(promotion_gate)
+                if not promotion_gate.get("valid"):
+                    raise ValueError("model promotion gate failed")
             if target_stage == "shadow":
                 for other in self._models.values():
                     if other["stage"] == "shadow":
@@ -903,7 +987,7 @@ class ControlPlane:
                     actor=actor,
                     target=model_id,
                     request={"stage": "shadow"},
-                    result={"model_id": model_id, "stage": "shadow"},
+                    result={"model_id": model_id, "stage": "shadow", "promotion_gate": dict(promotion_gate or {})},
                     **_operation_context(operation_context),
                 )
             else:  # champion
@@ -929,7 +1013,11 @@ class ControlPlane:
                     actor=actor,
                     target=model_id,
                     request={"stage": "champion"},
-                    result={"previous_champion": previous, "champion": model_id},
+                    result={
+                        "previous_champion": previous,
+                        "champion": model_id,
+                        "promotion_gate": dict(promotion_gate or {}),
+                    },
                     **_operation_context(operation_context),
                 )
             return dict(model)

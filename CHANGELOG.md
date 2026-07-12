@@ -25,3 +25,8 @@ surfaces stabilize.
 - GitHub CI, issue templates, PR template, README assets, and runnable examples.
 - App-facing serving endpoint discovery through `GET /v1/serving-endpoint`,
   `tenta endpoint`, and model promotion responses.
+- Timber artifact manifest registration with SHA-256 validation, signature
+  metadata checks, workload compatibility checks, replay-gated promotion, and
+  `tenta model ...` CLI commands.
+- `TentaClient` Python helper for endpoint discovery, decisions, decision
+  lookup, health, and feedback.

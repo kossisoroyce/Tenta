@@ -299,6 +299,7 @@ write a `governance.denied` operation event with the allowed roles.
 - `POST /v1/workloads/import`
 - `GET /v1/models`
 - `GET /v1/models/{model_id}/endpoint`
+- `POST /v1/models/register`
 - `POST /v1/models/load`
 - `POST /v1/models/{model_id}/promote`
 - `POST /v1/models/rollback`
@@ -323,6 +324,42 @@ registered_not_serving`.
 
 `GET /v1/models/{model_id}/endpoint` returns the serving status for one model.
 This is useful after a Timber artifact is uploaded, loaded, or promoted.
+
+`POST /v1/models/register` registers a Timber artifact manifest as a candidate.
+The runtime verifies the artifact hash and signature metadata immediately, then
+stores workload compatibility results on the model record.
+
+```json
+{
+  "manifest": {
+    "schema_version": "tenta.timber-manifest.v1",
+    "model": {
+      "model_id": "decision-risk-xgb-v14",
+      "version": "14.0.0",
+      "backend": "timber"
+    },
+    "artifact": {
+      "path": "examples/artifacts/decision-risk-v14.timber",
+      "sha256": "3f33318800489634c3de829347643749b456af21ec8ef1d3605049377808d02f",
+      "signature": "ed25519:verified",
+      "signature_status": "verified"
+    },
+    "feature_contract": {
+      "workload_id": "decision_risk",
+      "features": ["merchant_risk", "velocity_10m", "account_age_days", "chargeback_count", "is_high_risk_country"]
+    },
+    "runtime": {"predictor": "rule_based"}
+  },
+  "actor": "operator@example.com",
+  "role": "model-risk"
+}
+```
+
+Promotion to `shadow` or `champion` runs the gate again and requires:
+
+- valid artifact hash and verified signature metadata
+- active workload compatibility
+- passing replay fixtures for the active workload
 
 `POST /v1/models/load`, `POST /v1/models/upload`,
 `POST /v1/models/{model_id}/promote`, and `POST /v1/models/rollback` return the

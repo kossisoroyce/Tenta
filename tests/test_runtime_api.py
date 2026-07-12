@@ -18,6 +18,8 @@ from tenta_runtime import (  # noqa: E402
     InMemoryControlPlaneStore,
     RuleBasedModelWrapper,
     RuntimeEngine,
+    TentaClient,
+    sha256_file,
 )
 from tenta_runtime.api import make_handler  # noqa: E402
 from tenta_runtime.console_api import ConsoleRoutes  # noqa: E402
@@ -194,6 +196,33 @@ class RuntimeApiTests(unittest.TestCase):
         self.assertEqual(body["serving_mode"], "governed_decision_runtime")
         self.assertEqual(body["workload_id"], "decision_risk")
 
+    def test_python_client_discovers_endpoint_and_decides(self):
+        client = TentaClient(self.base_url)
+        endpoint = client.endpoint()
+        decision = client.decide(
+            {
+                "decision_request_id": "req-client-001",
+                "subject_id": "subject-client",
+                "context_id": "reference-workload",
+                "value": 120,
+                "currency": "USD",
+                "channel": "api",
+                "requested_at": "2026-07-11T12:00:00Z",
+                "features": {
+                    "entity_risk": 0.1,
+                    "velocity_10m": 1,
+                    "subject_age_days": 400,
+                    "prior_adverse_events": 0,
+                    "high_risk_segment": False,
+                },
+            }
+        )
+        lookup = client.decision("req-client-001")
+
+        self.assertEqual(endpoint["url"], f"{self.base_url}/v1/decision-requests")
+        self.assertEqual(decision["decision_request_id"], "req-client-001")
+        self.assertEqual(lookup["decision"], decision["decision"])
+
     def test_models_endpoint_decorates_champion_with_serving_endpoint(self):
         body = self._get_json("/v1/models")
         champion = next(model for model in body["models"] if model["stage"] == "champion")
@@ -223,6 +252,66 @@ class RuntimeApiTests(unittest.TestCase):
         operations = self._get_json("/v1/operations?limit=1")
         self.assertEqual(operations["operations"][0]["operation_type"], "model.promote")
         self.assertEqual(operations["operations"][0]["request_id"], "req-model-promote")
+
+    def test_register_timber_manifest_and_promote_after_gates(self):
+        manifest = self._write_manifest("decision-risk-xgb-v14")
+
+        registered = self._post_json(
+            "/v1/models/register",
+            {
+                "manifest": manifest,
+                "actor": "casey@example.com",
+                "role": "model-risk",
+                "request_id": "req-model-register",
+            },
+        )
+
+        self.assertEqual(registered["model_id"], "decision-risk-xgb-v14")
+        self.assertEqual(registered["stage"], "candidate")
+        self.assertTrue(registered["artifact_validation"]["valid"])
+        self.assertTrue(registered["workload_compatibility"]["valid"])
+        self.assertEqual(registered["serving_endpoint"]["status"], "registered_not_serving")
+
+        promoted = self._post_json(
+            "/v1/models/decision-risk-xgb-v14/promote",
+            {
+                "stage": "champion",
+                "actor": "casey@example.com",
+                "role": "model-risk",
+                "request_id": "req-model-manifest-promote",
+            },
+        )
+
+        self.assertEqual(promoted["stage"], "champion")
+        self.assertEqual(promoted["serving_endpoint"]["url"], f"{self.base_url}/v1/decision-requests")
+        self.assertEqual(promoted["promotion_gate"]["status"], "passed")
+        self.assertEqual(promoted["promotion_gate"]["checks"]["replay"]["status"], "passed")
+
+    def test_register_timber_manifest_blocks_incompatible_promotion(self):
+        manifest = self._write_manifest("decision-risk-missing-feature", features=["merchant_risk"])
+        registered = self._post_json(
+            "/v1/models/register",
+            {
+                "manifest": manifest,
+                "actor": "casey@example.com",
+                "role": "model-risk",
+            },
+        )
+
+        self.assertFalse(registered["workload_compatibility"]["valid"])
+        with self.assertRaises(HTTPError) as error:
+            self._post_json(
+                "/v1/models/decision-risk-missing-feature/promote",
+                {
+                    "stage": "champion",
+                    "actor": "casey@example.com",
+                    "role": "model-risk",
+                },
+            )
+
+        self.assertEqual(error.exception.code, 409)
+        payload = json.loads(error.exception.read().decode("utf-8"))
+        self.assertIn("model promotion gate failed", payload["message"])
 
     def test_database_provision_sqlite_endpoint_connects_runtime(self):
         db_path = str(Path(self.static_dir.name) / "runtime.sqlite3")
@@ -527,6 +616,46 @@ class RuntimeApiTests(unittest.TestCase):
         )
         with urlopen(request, timeout=2) as response:
             return json.loads(response.read().decode("utf-8"))
+
+    def _write_manifest(self, model_id, features=None):
+        directory = Path(self.static_dir.name)
+        artifact_path = directory / f"{model_id}.timber"
+        artifact_path.write_text("timber artifact fixture\n", encoding="utf-8")
+        return {
+            "schema_version": "tenta.timber-manifest.v1",
+            "model": {
+                "model_id": model_id,
+                "version": "14.0.0",
+                "backend": "timber",
+                "trained_on": "2026-07-12",
+            },
+            "artifact": {
+                "path": str(artifact_path),
+                "sha256": sha256_file(artifact_path),
+                "signature": "ed25519:verified",
+                "signature_status": "verified",
+            },
+            "feature_contract": {
+                "workload_id": "decision_risk",
+                "features": features or [
+                    "merchant_risk",
+                    "velocity_10m",
+                    "account_age_days",
+                    "chargeback_count",
+                    "is_high_risk_country",
+                ],
+            },
+            "metrics": {
+                "auc": 0.978,
+                "pr_auc": 0.862,
+                "fpr": 0.008,
+                "recall": 0.904,
+                "precision": 0.924,
+                "p99_latency_ms": 5.8,
+            },
+            "scoring": {"score_gain": 1.0, "score_bias": 0.0},
+            "runtime": {"predictor": "rule_based"},
+        }
 
 
 if __name__ == "__main__":

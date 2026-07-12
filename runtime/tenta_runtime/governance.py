@@ -29,6 +29,7 @@ PERMISSIONS: Dict[str, Set[str]] = {
     "workload.activate": {ROLE_ADMIN, ROLE_MODEL_RISK},
     "workload.import": {ROLE_ADMIN, ROLE_MODEL_RISK},
     "model.load": {ROLE_ADMIN, ROLE_MODEL_RISK},
+    "model.register": {ROLE_ADMIN, ROLE_MODEL_RISK},
     "model.upload": {ROLE_ADMIN, ROLE_MODEL_RISK},
     "model.promote": {ROLE_ADMIN, ROLE_MODEL_RISK},
     "model.rollback": {ROLE_ADMIN, ROLE_MODEL_RISK},

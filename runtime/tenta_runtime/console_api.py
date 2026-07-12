@@ -13,12 +13,18 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import unquote
 
+from .artifacts import ArtifactValidationError, TimberArtifactManifest
+from .audit import InMemoryAuditSink
 from .control_plane import ControlPlane
 from .database import RuntimeConfig, load_runtime_config, save_runtime_config
 from .engine import RuntimeEngine
 from .governance import ActorContext, GovernanceError
 from .healing_executor import HealingExecutor
 from .integrity import combine_reports
+from .models import TimberModelWrapper
+from .policy import DecisionPolicy
+from .replay import run_replay
+from .storage import InMemoryRuntimeStore
 
 Result = Optional[Tuple[int, Dict[str, Any]]]
 
@@ -108,6 +114,9 @@ class ConsoleRoutes:
         if path.startswith("/v1/models/") and path.endswith("/endpoint"):
             model_id = unquote(path[len("/v1/models/"):-len("/endpoint")])
             return 200, self._serving_endpoint(base_url, model_id=model_id)
+        if path.startswith("/v1/models/"):
+            model_id = unquote(path[len("/v1/models/"):])
+            return 200, self._decorate_model(self.cp.model(model_id), base_url)
         if path == "/v1/healing/actions":
             return 200, self.cp.healing_actions()
         if path == "/v1/drift":
@@ -203,6 +212,29 @@ class ConsoleRoutes:
                 operation_context=actor_context.to_dict(),
             )
             return 200, self._decorate_model(model, base_url)
+        if path == "/v1/models/register":
+            self._authorize(actor_context, "model.register", target=str(body.get("model_id") or "manifest"))
+            manifest_payload = body.get("manifest")
+            if not isinstance(manifest_payload, dict):
+                manifest_payload = body
+            manifest_path = str(body.get("manifest_path") or "").strip() or None
+            manifest = TimberArtifactManifest.from_mapping(
+                manifest_payload,
+                manifest_path=Path(manifest_path) if manifest_path else None,
+            )
+            artifact_validation = manifest.validation_report()
+            if not artifact_validation["valid"]:
+                raise ValueError("artifact manifest is invalid: " + "; ".join(artifact_validation["errors"]))
+            compatibility = manifest.compatibility_report(self.engine.workloads.active())
+            model = self.cp.register_model_manifest(
+                manifest.to_dict(),
+                manifest_path=manifest_path,
+                artifact_validation=artifact_validation,
+                workload_compatibility=compatibility,
+                actor=actor_context.actor,
+                operation_context=actor_context.to_dict(),
+            )
+            return 200, self._decorate_model(model, base_url)
         if path == "/v1/models/upload":
             self._authorize(actor_context, "model.upload", target=str(body.get("model_id") or ""))
             model = self.cp.upload_model(
@@ -222,11 +254,13 @@ class ConsoleRoutes:
             model_id = unquote(path[len("/v1/models/"):-len("/promote")])
             self._authorize(actor_context, "model.promote", target=model_id)
             stage = str(body.get("stage") or "shadow")
+            promotion_gate = self._promotion_gate(model_id)
             model = self.cp.promote_model(
                 model_id,
                 stage,
                 actor=actor_context.actor,
                 operation_context=actor_context.to_dict(),
+                promotion_gate=promotion_gate,
             )
             return 200, self._decorate_model(model, base_url)
 
@@ -334,6 +368,76 @@ class ConsoleRoutes:
         payload["models"] = [self._decorate_model(model, base_url) for model in payload["models"]]
         payload["serving_endpoint"] = self._serving_endpoint(base_url)
         return payload
+
+    def _promotion_gate(self, model_id: str) -> Dict[str, Any]:
+        model = self.cp.model(model_id)
+        checks: Dict[str, Any] = {
+            "artifact": {"valid": True, "status": "skipped", "reason": "seeded model record"},
+            "workload": {"valid": True, "status": "skipped", "reason": "seeded model record"},
+            "replay": {"valid": True, "status": "skipped", "reason": "seeded model record"},
+        }
+        manifest_payload = model.get("artifact_manifest")
+        if isinstance(manifest_payload, dict):
+            try:
+                manifest = TimberArtifactManifest.from_mapping(manifest_payload)
+                artifact = manifest.validation_report()
+                compatibility = manifest.compatibility_report(self.engine.workloads.active())
+                replay = self._run_manifest_replay(manifest)
+            except ArtifactValidationError as exc:
+                artifact = {"valid": False, "status": "invalid", "errors": [str(exc)]}
+                compatibility = {"valid": False, "status": "not_checked", "errors": ["artifact manifest invalid"]}
+                replay = {"valid": False, "status": "not_checked", "errors": ["artifact manifest invalid"]}
+            checks = {
+                "artifact": artifact,
+                "workload": compatibility,
+                "replay": replay,
+            }
+            self.cp.update_model_checks(
+                model_id,
+                artifact_validation=artifact,
+                workload_compatibility=compatibility,
+            )
+        valid = all(bool(check.get("valid")) for check in checks.values())
+        gate = {
+            "valid": valid,
+            "status": "passed" if valid else "failed",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "workload_id": self.engine.workloads.active_id,
+            "checks": checks,
+        }
+        if not valid:
+            failures = []
+            for name, check in checks.items():
+                if not check.get("valid"):
+                    failures.extend(f"{name}: {error}" for error in check.get("errors", ["failed"]))
+            raise ValueError("model promotion gate failed: " + "; ".join(failures))
+        return gate
+
+    def _run_manifest_replay(self, manifest: TimberArtifactManifest) -> Dict[str, Any]:
+        workload = self.engine.workloads.active()
+        replay_engine = RuntimeEngine(
+            model=TimberModelWrapper(manifest),
+            policy=DecisionPolicy.from_workload(workload),
+            audit_sink=InMemoryAuditSink(),
+            store=InMemoryRuntimeStore(),
+            workloads=self.engine.workloads,
+        )
+        summary = run_replay(replay_engine, workload.workload_id)
+        errors = []
+        if summary["count"] == 0:
+            errors.append(f"no replay cases found for workload {workload.workload_id}")
+        if summary["status"] != "passed":
+            errors.append("replay cases failed")
+        return {
+            "valid": not errors,
+            "status": "passed" if not errors else "failed",
+            "errors": errors,
+            "workload_id": workload.workload_id,
+            "passed": summary["passed"],
+            "failed": summary["failed"],
+            "count": summary["count"],
+            "results": summary["results"],
+        }
 
     def _decorate_model(self, model: Dict[str, Any], base_url: str) -> Dict[str, Any]:
         response = dict(model)

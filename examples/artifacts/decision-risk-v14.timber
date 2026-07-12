@@ -1,0 +1,4 @@
+Tenta Timber artifact fixture.
+
+This is not a production model. It exists so the example manifest can exercise
+artifact hash validation, registration, promotion gates, and endpoint discovery.

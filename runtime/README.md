@@ -99,6 +99,10 @@ tenta decision req-001 --url http://127.0.0.1:8080
 tenta transaction txn-001 --url http://127.0.0.1:8080
 tenta operations --url http://127.0.0.1:8080 --limit 10
 tenta audit verify --url http://127.0.0.1:8080
+tenta model list --url http://127.0.0.1:8080
+tenta model register examples/decision-risk-v14.tenta.json --url http://127.0.0.1:8080
+tenta model promote decision-risk-xgb-v14 --stage champion --url http://127.0.0.1:8080
+tenta model endpoint decision-risk-xgb-v14 --url http://127.0.0.1:8080
 tenta workload list --url http://127.0.0.1:8080
 tenta workload active --url http://127.0.0.1:8080
 tenta workload validate --url http://127.0.0.1:8080 --payload request.json --workload-id decision_risk
@@ -169,6 +173,29 @@ and URL:
 Model load, upload, promote, rollback, and registry responses include the same
 `serving_endpoint` object. Only the champion model reports a live app endpoint;
 candidate and shadow models remain registered but not app-facing.
+
+## Timber Artifact Manifests
+
+Tenta registers Timber outputs through a manifest file. The manifest binds the
+model id/version, artifact path, SHA-256 digest, signature metadata, active
+workload feature contract, offline metrics, and local replay predictor mode.
+
+```bash
+tenta model register examples/decision-risk-v14.tenta.json --url http://127.0.0.1:8080
+tenta model promote decision-risk-xgb-v14 --stage champion --url http://127.0.0.1:8080
+```
+
+Promotion to `shadow` or `champion` requires:
+
+- artifact file exists and matches the manifest SHA-256
+- signature metadata is marked verified
+- manifest workload id matches the active workload
+- manifest feature contract covers every active workload feature
+- active workload replay fixtures pass with the candidate wrapper
+
+The first `TimberModelWrapper` supports a deterministic `rule_based` local
+predictor so manifests can be exercised without a native library in tests and
+examples. Native Timber ABI dispatch belongs behind the same wrapper contract.
 
 ## Replay Fixtures
 

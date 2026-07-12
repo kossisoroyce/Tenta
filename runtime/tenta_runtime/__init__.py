@@ -1,6 +1,8 @@
 """Runtime core for the Tenta Decision Runtime."""
 
 from .audit import DecisionEvent, InMemoryAuditSink, JsonlAuditSink
+from .artifacts import ArtifactValidationError, TimberArtifactManifest, load_timber_manifest, sha256_file
+from .client import TentaClient, TentaClientError
 from .control_plane import ControlPlane, RegistryModelWrapper
 from .control_plane_store import (
     ControlPlaneStore,
@@ -27,7 +29,7 @@ from .integrity import (
     verify_operation_events,
     verify_runtime_store,
 )
-from .models import ModelPrediction, PayloadValidationError, RuleBasedModelWrapper, ScoringRequest
+from .models import ModelPrediction, PayloadValidationError, RuleBasedModelWrapper, ScoringRequest, TimberModelWrapper
 from .operations import OperationEvent
 from .policy import DecisionPolicy
 from .replay import ReplayCase, load_replay_cases, replay_manifest, run_replay
@@ -58,6 +60,7 @@ __all__ = [
     "DecisionEvent",
     "DecisionPolicy",
     "ActorContext",
+    "ArtifactValidationError",
     "ControlPlaneStore",
     "ControlPlane",
     "CommandResult",
@@ -88,6 +91,10 @@ __all__ = [
     "RuntimeStore",
     "RuntimeConfig",
     "ScoringRequest",
+    "TentaClient",
+    "TentaClientError",
+    "TimberArtifactManifest",
+    "TimberModelWrapper",
     "CachedDecision",
     "SQLiteControlPlaneStore",
     "SQLiteRuntimeStore",
@@ -105,8 +112,10 @@ __all__ = [
     "default_workload_registry",
     "default_active_workload_from_config",
     "load_workload_spec",
+    "load_timber_manifest",
     "load_replay_cases",
     "replay_manifest",
     "run_replay",
     "save_workload_spec",
+    "sha256_file",
 ]

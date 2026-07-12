@@ -36,6 +36,7 @@ COMMANDS = {
     "decisions",
     "transaction",
     "operations",
+    "model",
     "workload",
     "replay",
     "feedback",
@@ -66,6 +67,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         _print_json(_request_json(parsed.url, f"/v1/transactions/{parsed.transaction_id}"))
     elif parsed.command == "operations":
         _print_json(_request_json(parsed.url, f"/v1/operations?limit={parsed.limit}"))
+    elif parsed.command == "model":
+        _model(parsed)
     elif parsed.command == "workload":
         _workload(parsed)
     elif parsed.command == "replay":
@@ -134,6 +137,41 @@ def _build_parser() -> argparse.ArgumentParser:
     operations = subparsers.add_parser("operations", help="List recent control-plane operation events.")
     operations.add_argument("--url", default=DEFAULT_BASE_URL)
     operations.add_argument("--limit", default=50, type=int)
+
+    model = subparsers.add_parser("model", help="Register, promote, and inspect model artifacts.")
+    model_subparsers = model.add_subparsers(dest="model_command", required=True)
+
+    model_list = model_subparsers.add_parser("list", help="List registered models.")
+    model_list.add_argument("--url", default=DEFAULT_BASE_URL)
+
+    model_show = model_subparsers.add_parser("show", help="Show one registered model.")
+    model_show.add_argument("model_id")
+    model_show.add_argument("--url", default=DEFAULT_BASE_URL)
+
+    model_register = model_subparsers.add_parser("register", help="Register a Timber artifact manifest.")
+    model_register.add_argument("manifest")
+    model_register.add_argument("--actor", default="operator@cli")
+    model_register.add_argument("--role", default="model-risk")
+    model_register.add_argument("--reason", default=None)
+    model_register.add_argument("--url", default=DEFAULT_BASE_URL)
+
+    model_promote = model_subparsers.add_parser("promote", help="Promote a model to shadow or champion.")
+    model_promote.add_argument("model_id")
+    model_promote.add_argument("--stage", choices=["shadow", "champion"], default="shadow")
+    model_promote.add_argument("--actor", default="operator@cli")
+    model_promote.add_argument("--role", default="model-risk")
+    model_promote.add_argument("--reason", default=None)
+    model_promote.add_argument("--url", default=DEFAULT_BASE_URL)
+
+    model_rollback = model_subparsers.add_parser("rollback", help="Roll back the live champion model.")
+    model_rollback.add_argument("--actor", default="operator@cli")
+    model_rollback.add_argument("--role", default="model-risk")
+    model_rollback.add_argument("--reason", default=None)
+    model_rollback.add_argument("--url", default=DEFAULT_BASE_URL)
+
+    model_endpoint = model_subparsers.add_parser("endpoint", help="Fetch a model endpoint or the live endpoint.")
+    model_endpoint.add_argument("model_id", nargs="?", default=None)
+    model_endpoint.add_argument("--url", default=DEFAULT_BASE_URL)
 
     workload = subparsers.add_parser("workload", help="Inspect and manage workload specs.")
     workload_subparsers = workload.add_subparsers(dest="workload_command", required=True)
@@ -368,6 +406,52 @@ def _db(args: argparse.Namespace) -> None:
         })
         return
     raise SystemExit(f"unsupported db command: {args.db_command}")
+
+
+def _model(args: argparse.Namespace) -> None:
+    if args.model_command == "list":
+        _print_json(_request_json(args.url, "/v1/models"))
+        return
+    if args.model_command == "show":
+        _print_json(_request_json(args.url, f"/v1/models/{args.model_id}"))
+        return
+    if args.model_command == "register":
+        manifest_path = Path(args.manifest)
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        payload = {
+            "manifest": manifest,
+            "manifest_path": str(manifest_path),
+            "actor": args.actor,
+            "role": args.role,
+        }
+        if args.reason:
+            payload["reason"] = args.reason
+        _print_json(_request_json(args.url, "/v1/models/register", method="POST", payload=payload))
+        return
+    if args.model_command == "promote":
+        payload = {
+            "stage": args.stage,
+            "actor": args.actor,
+            "role": args.role,
+        }
+        if args.reason:
+            payload["reason"] = args.reason
+        _print_json(_request_json(args.url, f"/v1/models/{args.model_id}/promote", method="POST", payload=payload))
+        return
+    if args.model_command == "rollback":
+        payload = {
+            "actor": args.actor,
+            "role": args.role,
+        }
+        if args.reason:
+            payload["reason"] = args.reason
+        _print_json(_request_json(args.url, "/v1/models/rollback", method="POST", payload=payload))
+        return
+    if args.model_command == "endpoint":
+        path = "/v1/serving-endpoint" if not args.model_id else f"/v1/models/{args.model_id}/endpoint"
+        _print_json(_request_json(args.url, path))
+        return
+    raise SystemExit(f"unsupported model command: {args.model_command}")
 
 
 def _workload(args: argparse.Namespace) -> None:

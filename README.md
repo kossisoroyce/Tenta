@@ -31,6 +31,8 @@ needs context, control, and a durable record.
 - Generic `decision_risk` workload plus a `payment_fraud` reference workload.
 - Workload import/export, activation, validation, sample payloads, and replay
   fixtures.
+- Timber artifact manifest registration with hash/signature/workload/replay
+  promotion gates.
 - SQLite-first persistence with optional local Postgres provisioning.
 - Hash-chained decision and operation ledgers.
 - Persistent control-plane state for models, drift, healing, feedback,
@@ -79,6 +81,8 @@ decision endpoint rather than a raw model server. That stable endpoint keeps
 policy, audit, idempotency, workload validation, and rollback in the path.
 
 ```bash
+tenta model register examples/decision-risk-v14.tenta.json --url http://127.0.0.1:8080
+tenta model promote decision-risk-xgb-v14 --stage champion --url http://127.0.0.1:8080
 tenta endpoint --url http://127.0.0.1:8080
 ```
 
@@ -125,11 +129,40 @@ result = engine.score(
 print(result["decision"], result["score"])
 ```
 
+Application client:
+
+```python
+from tenta_runtime import TentaClient
+
+client = TentaClient("http://127.0.0.1:8080")
+print(client.endpoint()["url"])
+decision = client.decide(
+    {
+        "decision_request_id": "req-app-001",
+        "subject_id": "subject-001",
+        "context_id": "checkout",
+        "value": 120,
+        "currency": "USD",
+        "channel": "api",
+        "requested_at": "2026-07-11T12:00:00Z",
+        "features": {
+            "entity_risk": 0.18,
+            "velocity_10m": 2,
+            "subject_age_days": 180,
+            "prior_adverse_events": 0,
+            "high_risk_segment": False,
+        },
+    }
+)
+```
+
 ## CLI Surface
 
 ```bash
 tenta health --url http://127.0.0.1:8080
 tenta endpoint --url http://127.0.0.1:8080
+tenta model register examples/decision-risk-v14.tenta.json --url http://127.0.0.1:8080
+tenta model promote decision-risk-xgb-v14 --stage champion --url http://127.0.0.1:8080
 tenta decisions --limit 10 --url http://127.0.0.1:8080
 tenta decision req-001 --url http://127.0.0.1:8080
 tenta audit verify --url http://127.0.0.1:8080
@@ -166,6 +199,9 @@ tenta db provision-postgres --url http://127.0.0.1:8080
 | `POST` | `/v1/decision-requests` | Score and persist a decision |
 | `GET` | `/v1/decision-requests/{id}` | Fetch a decision trail |
 | `GET` | `/v1/overview` | Dashboard overview payload |
+| `GET` | `/v1/models` | List registered models |
+| `POST` | `/v1/models/register` | Register a Timber artifact manifest |
+| `POST` | `/v1/models/{id}/promote` | Promote a model after gates pass |
 | `GET` | `/v1/workloads` | List packaged and imported workloads |
 | `POST` | `/v1/workloads/import` | Import a workload spec |
 | `POST` | `/v1/workloads/activate` | Switch the active workload |
