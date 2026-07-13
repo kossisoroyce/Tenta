@@ -3,25 +3,33 @@ import { Badge, Button } from "@cloudflare/kumo";
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react";
 
 import { getDrift, updateDrift } from "../api";
-import { ErrorState, LoadingState, PageHeader, StatTile } from "../components";
+import { ErrorState, LoadingState, PageHeader, RefreshMeta, StatTile } from "../components";
+import { useOperator, useToast } from "../governance";
 import { useApi } from "../hooks";
 import { driftStatusVariant, fmtInt, fmtNum, fmtPct, relTime, severityColor, severityVariant } from "../lib";
+import { navigate, useRouteParams } from "../router";
 
 export function Drift() {
-  const { data, error, loading, refresh } = useApi(getDrift, 8000);
+  const { data, error, loading, updatedAt, refresh } = useApi(getDrift, 8000);
+  const operator = useOperator();
+  const toast = useToast();
+  const params = useRouteParams();
   const [busy, setBusy] = useState<string | null>(null);
 
   const act = useCallback(
-    async (key: string, fn: () => Promise<unknown>) => {
+    async (key: string, fn: () => Promise<unknown>, successTitle: string, successDetail?: string) => {
       setBusy(key);
       try {
         await fn();
         await refresh();
+        toast.notify({ tone: "success", title: successTitle, detail: successDetail });
+      } catch (err) {
+        toast.notify({ tone: "error", title: "Action failed", detail: err instanceof Error ? err.message : "Drift action failed" });
       } finally {
         setBusy(null);
       }
     },
-    [refresh],
+    [refresh, toast],
   );
 
   if (loading && !data) return <LoadingState />;
@@ -29,6 +37,8 @@ export function Drift() {
   if (!data) return null;
 
   const c = data.counts;
+  const focus = params.get("focus");
+  const canAct = operator.can("drift.acknowledge");
 
   return (
     <>
@@ -37,9 +47,12 @@ export function Drift() {
         title="Health signals by segment"
         description="Feature stability, data quality, and concept-drift monitors comparing the current window against baseline."
         actions={
-          <Button variant="ghost" shape="square" aria-label="Refresh" onClick={refresh}>
-            <ArrowsClockwiseIcon size={16} />
-          </Button>
+          <>
+            <Button variant="ghost" shape="square" aria-label="Refresh" onClick={refresh}>
+              <ArrowsClockwiseIcon size={16} />
+            </Button>
+            <RefreshMeta updatedAt={updatedAt} intervalMs={8000} />
+          </>
         }
       />
 
@@ -54,7 +67,7 @@ export function Drift() {
         {data.monitors.map((m) => {
           const ratio = Math.min(1.4, m.statistic / m.threshold);
           return (
-            <article className={`alert-card sev-${m.severity}`} key={m.id}>
+            <article className={`alert-card sev-${m.severity}${focus === m.id ? " focused" : ""}`} key={m.id}>
               <div className="alert-rail" style={{ background: severityColor(m.severity) }} />
               <div className="alert-content">
                 <div className="alert-head">
@@ -73,18 +86,32 @@ export function Drift() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={m.status === "acknowledged"}
+                      disabled={!canAct || m.status === "acknowledged"}
                       loading={busy === `ack-${m.id}`}
-                      onClick={() => act(`ack-${m.id}`, () => updateDrift(m.id, "acknowledge"))}
+                      onClick={() =>
+                        act(
+                          `ack-${m.id}`,
+                          () => updateDrift(m.id, "acknowledge", operator.payload("Acknowledged drift monitor from console.")),
+                          "Drift acknowledged",
+                          m.segment,
+                        )
+                      }
                     >
                       Acknowledge
                     </Button>
                     <Button
                       variant="secondary"
                       size="sm"
-                      disabled={m.status === "escalated"}
+                      disabled={!operator.can("drift.escalate") || m.status === "escalated"}
                       loading={busy === `esc-${m.id}`}
-                      onClick={() => act(`esc-${m.id}`, () => updateDrift(m.id, "escalate"))}
+                      onClick={() =>
+                        act(
+                          `esc-${m.id}`,
+                          () => updateDrift(m.id, "escalate", operator.payload("Escalated drift monitor from console.")),
+                          "Drift escalated",
+                          m.segment,
+                        )
+                      }
                     >
                       Escalate
                     </Button>
@@ -115,7 +142,11 @@ export function Drift() {
                   </div>
                   <p className="alert-reco">
                     <span className="muted">Recommended</span> {m.recommended_action}
-                    {m.linked_action && <Badge variant="purple" appearance="dot">healing linked</Badge>}
+                    {m.linked_action && (
+                      <button type="button" className="linked-badge" onClick={() => navigate("healing", { focus: m.linked_action })}>
+                        <Badge variant="purple" appearance="dot">healing linked</Badge>
+                      </button>
+                    )}
                   </p>
                 </div>
               </div>

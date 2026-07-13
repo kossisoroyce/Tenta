@@ -9,7 +9,8 @@ import {
   type DatabaseBackendOption,
   type ProvisionDatabaseResponse,
 } from "../api";
-import { ErrorState, InfoGrid, InfoRow, LoadingState, PageHeader, Panel, StatTile } from "../components";
+import { ErrorState, InfoGrid, InfoRow, LoadingState, PageHeader, Panel, RefreshMeta, StatTile } from "../components";
+import { useOperator, useToast } from "../governance";
 import { useApi } from "../hooks";
 import { fmtInt, relTime, runtimeStatusVariant, titleize } from "../lib";
 
@@ -44,11 +45,13 @@ function BackendCard({
   connectedBackend,
   busy,
   onProvision,
+  canProvision,
 }: {
   option: DatabaseBackendOption;
   connectedBackend?: string | null;
   busy: string | null;
   onProvision: (backend: string) => void;
+  canProvision: boolean;
 }) {
   const state = backendStatus(option, connectedBackend);
   const running = busy === option.backend;
@@ -89,7 +92,7 @@ function BackendCard({
       <Button
         variant={option.backend === connectedBackend ? "secondary" : "primary"}
         loading={running}
-        disabled={busy !== null || !option.provisionable}
+        disabled={busy !== null || !option.provisionable || !canProvision}
         onClick={() => onProvision(option.backend)}
       >
         Provision {option.backend === "sqlite" ? "SQLite" : "Postgres"}
@@ -99,7 +102,9 @@ function BackendCard({
 }
 
 export function Storage() {
-  const { data, error, loading, refresh } = useApi(getDatabaseStatus, 7000);
+  const { data, error, loading, updatedAt, refresh } = useApi(getDatabaseStatus, 7000);
+  const operator = useOperator();
+  const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<ProvisionDatabaseResponse | null>(null);
@@ -109,16 +114,20 @@ export function Storage() {
       setBusy(backend);
       setActionError(null);
       try {
-        const result = backend === "sqlite" ? await provisionSQLite() : await provisionPostgres();
+        const actor = operator.payload(`Provision ${backend} storage from console.`);
+        const result = backend === "sqlite" ? await provisionSQLite(actor) : await provisionPostgres(actor);
         setLastResult(result);
         await refresh();
+        toast.notify({ tone: "success", title: "Database connected", detail: `${titleize(backend)} is now the runtime store.` });
       } catch (err) {
-        setActionError(err instanceof Error ? err.message : "Provisioning failed");
+        const message = err instanceof Error ? err.message : "Provisioning failed";
+        setActionError(message);
+        toast.notify({ tone: "error", title: "Provisioning failed", detail: message });
       } finally {
         setBusy(null);
       }
     },
-    [refresh],
+    [operator, refresh, toast],
   );
 
   if (loading && !data) return <LoadingState />;
@@ -135,9 +144,12 @@ export function Storage() {
         title="Runtime storage"
         description="Provision and connect the self-contained database layer for decisions, audit events, feedback, and runtime memory."
         actions={
-          <Button variant="ghost" shape="square" aria-label="Refresh" onClick={refresh}>
-            <ArrowsClockwiseIcon size={16} />
-          </Button>
+          <>
+            <Button variant="ghost" shape="square" aria-label="Refresh" onClick={refresh}>
+              <ArrowsClockwiseIcon size={16} />
+            </Button>
+            <RefreshMeta updatedAt={updatedAt} intervalMs={7000} />
+          </>
         }
       />
 
@@ -206,6 +218,7 @@ export function Storage() {
                 connectedBackend={connected.backend}
                 busy={busy}
                 onProvision={provision}
+                canProvision={operator.can("database.provision")}
               />
             ))}
           </div>

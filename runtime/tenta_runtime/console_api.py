@@ -60,7 +60,8 @@ class ConsoleRoutes:
         base_url = str(request_context.get("base_url") or "http://127.0.0.1:8080").rstrip("/")
         actor_context = ActorContext.from_payload(
             body,
-            default_actor="operator@console",
+            default_actor="viewer@console",
+            default_role="viewer",
             default_source="console",
         )
         try:
@@ -245,6 +246,12 @@ class ConsoleRoutes:
             return 200, self._decorate_model(model, base_url)
         if path == "/v1/models/rollback":
             self._authorize(actor_context, "model.rollback")
+            self._require_reason(
+                actor_context,
+                "model.rollback",
+                target="champion",
+                detail="Rolling back the live champion model",
+            )
             model = self.cp.rollback_model(
                 actor=actor_context.actor,
                 operation_context=actor_context.to_dict(),
@@ -255,6 +262,13 @@ class ConsoleRoutes:
             self._authorize(actor_context, "model.promote", target=model_id)
             stage = str(body.get("stage") or "shadow")
             promotion_gate = self._promotion_gate(model_id)
+            if stage == "champion" and promotion_gate.get("valid"):
+                self._require_reason(
+                    actor_context,
+                    "model.promote",
+                    target=model_id,
+                    detail=f"Promoting {model_id} to champion",
+                )
             model = self.cp.promote_model(
                 model_id,
                 stage,
@@ -279,6 +293,14 @@ class ConsoleRoutes:
                 action_id, verb = rest.split("/", 1)
                 if verb == "approve":
                     self._authorize(actor_context, "healing.approve", target=action_id)
+                    action = self._healing_action(action_id)
+                    if action.get("risk") == "high" or action.get("policy_gate") == "human_approval_required":
+                        self._require_reason(
+                            actor_context,
+                            "healing.approve",
+                            target=action_id,
+                            detail=f"Approving healing action {action_id}",
+                        )
                     self.cp.decide_action(
                         action_id,
                         "approve",
@@ -362,6 +384,38 @@ class ConsoleRoutes:
                 reason=actor_context.reason,
             )
             raise
+
+    def _require_reason(
+        self,
+        actor_context: ActorContext,
+        operation: str,
+        *,
+        target: Optional[str],
+        detail: str,
+    ) -> None:
+        if actor_context.reason:
+            return
+        message = f"{detail} requires a justification note."
+        self.cp.record_operation(
+            "governance.denied",
+            actor_context.actor,
+            target=target,
+            status="denied",
+            request={"operation": operation, "reason_required": True, **actor_context.to_dict()},
+            result={"required": "reason"},
+            message=message,
+            role=actor_context.role,
+            source=actor_context.source,
+            request_id=actor_context.request_id,
+            reason=actor_context.reason,
+        )
+        raise ValueError(message)
+
+    def _healing_action(self, action_id: str) -> Dict[str, Any]:
+        action = next((item for item in self.cp.healing_actions()["actions"] if item["id"] == action_id), None)
+        if action is None:
+            raise KeyError(f"healing action '{action_id}' not found")
+        return action
 
     def _models_payload(self, base_url: str) -> Dict[str, Any]:
         payload = self.cp.models()

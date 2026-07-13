@@ -1,12 +1,15 @@
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Badge, Button } from "@cloudflare/kumo";
 import {
   ChartLineUpIcon,
   ChatCircleDotsIcon,
+  CommandIcon,
   DatabaseIcon,
   GaugeIcon,
   HeartbeatIcon,
   LightningIcon,
+  ListIcon,
   MoonIcon,
   ScalesIcon,
   StackIcon,
@@ -16,6 +19,7 @@ import {
 
 import type { OverviewResponse } from "./api";
 import { Logo } from "./components/Logo";
+import { isOperatorRole, useOperator, type OperatorRole } from "./governance";
 import { navigate, type Route, useRoute } from "./router";
 
 interface NavItem {
@@ -75,6 +79,96 @@ const NAV: NavGroup[] = [
   },
 ];
 
+const ROLE_LABELS: Record<OperatorRole, string> = {
+  viewer: "Viewer",
+  operator: "Operator",
+  analyst: "Analyst",
+  detector: "Detector",
+  "model-risk": "Model risk",
+  admin: "Admin",
+};
+
+function initials(actor: string): string {
+  const name = actor.split("@")[0] || actor;
+  const parts = name.split(/[._-]/).filter(Boolean);
+  const value = parts.length > 1 ? `${parts[0][0]}${parts[1][0]}` : name.slice(0, 2);
+  return value.toUpperCase();
+}
+
+function CommandPalette({
+  open,
+  onOpenChange,
+  overview,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  overview: OverviewResponse | null;
+}) {
+  const route = useRoute();
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onOpenChange(false);
+    };
+    if (open) {
+      setQuery("");
+      window.addEventListener("keydown", onKey);
+    }
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onOpenChange, open]);
+
+  if (!open) return null;
+
+  const items = NAV.flatMap((group) =>
+    group.items.map((item) => ({
+      ...item,
+      group: group.label,
+      count: item.badge ? item.badge(overview) : null,
+    })),
+  ).filter((item) => {
+    const needle = `${item.group} ${item.label}`.toLowerCase();
+    return needle.includes(query.trim().toLowerCase());
+  });
+
+  return createPortal(
+    <div className="modal-overlay command-overlay" onMouseDown={(event) => event.target === event.currentTarget && onOpenChange(false)}>
+      <div className="command-panel" role="dialog" aria-modal="true" aria-label="Command palette">
+        <div className="command-input-row">
+          <CommandIcon size={18} />
+          <input
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search pages and console actions..."
+          />
+        </div>
+        <div className="command-list">
+          {items.map((item) => (
+            <button
+              type="button"
+              className={route === item.route ? "command-item active" : "command-item"}
+              key={item.route}
+              onClick={() => {
+                navigate(item.route);
+                onOpenChange(false);
+              }}
+            >
+              <span className="command-icon">{item.icon}</span>
+              <span>
+                <strong>{item.label}</strong>
+                <small>{item.group}</small>
+              </span>
+              {item.count ? <span className="nav-count">{item.count}</span> : null}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 interface ShellProps {
   overview: OverviewResponse | null;
   mode: "light" | "dark";
@@ -84,12 +178,31 @@ interface ShellProps {
 
 export function Shell({ overview, mode, onToggleTheme, children }: ShellProps) {
   const route = useRoute();
+  const operator = useOperator();
+  const [actorDraft, setActorDraft] = useState(operator.actor);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const runtimeStatus = overview?.health.status ?? "unknown";
   const healthy = runtimeStatus === "healthy";
 
-  return (
-    <div className="app-shell">
-      <aside className="sidebar">
+  useEffect(() => {
+    setActorDraft(operator.actor);
+  }, [operator.actor]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setCommandOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const sidebar = useMemo(
+    () => (
+      <aside className={`sidebar${mobileOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="brand-mark">
             <Logo size={26} />
@@ -114,6 +227,7 @@ export function Shell({ overview, mode, onToggleTheme, children }: ShellProps) {
                     onClick={(e) => {
                       e.preventDefault();
                       navigate(item.route);
+                      setMobileOpen(false);
                     }}
                   >
                     <span className="nav-icon">{item.icon}</span>
@@ -132,13 +246,30 @@ export function Shell({ overview, mode, onToggleTheme, children }: ShellProps) {
             <span>Runtime {healthy ? "healthy" : runtimeStatus}</span>
           </div>
           <div className="sidebar-champion">
-            Live model · {overview?.summary.champion ?? "—"}
+            Live model / {overview?.summary.champion ?? "-"}
           </div>
         </div>
       </aside>
+    ),
+    [healthy, mobileOpen, overview, route, runtimeStatus],
+  );
+
+  return (
+    <div className="app-shell">
+      {mobileOpen && <button type="button" className="sidebar-backdrop" aria-label="Close menu" onClick={() => setMobileOpen(false)} />}
+      {sidebar}
 
       <div className="main">
         <header className="topbar">
+          <Button
+            variant="ghost"
+            shape="square"
+            aria-label="Open navigation"
+            className="mobile-menu-button"
+            onClick={() => setMobileOpen(true)}
+          >
+            <ListIcon size={18} />
+          </Button>
           <div className="topbar-status">
             <Badge variant="success" appearance="dot">
               Production
@@ -178,6 +309,14 @@ export function Shell({ overview, mode, onToggleTheme, children }: ShellProps) {
           <div className="topbar-actions">
             <Button
               variant="ghost"
+              icon={<CommandIcon size={16} />}
+              className="command-button"
+              onClick={() => setCommandOpen(true)}
+            >
+              K
+            </Button>
+            <Button
+              variant="ghost"
               shape="square"
               aria-label="Toggle colour theme"
               onClick={onToggleTheme}
@@ -185,10 +324,36 @@ export function Shell({ overview, mode, onToggleTheme, children }: ShellProps) {
               {mode === "dark" ? <SunIcon size={18} /> : <MoonIcon size={18} />}
             </Button>
             <div className="operator">
-              <span className="operator-avatar">OC</span>
+              <span className="operator-avatar">{initials(operator.actor)}</span>
               <div className="operator-meta">
-                <span className="operator-name">Operator</span>
-                <span className="operator-role">ML governance</span>
+                <input
+                  className="operator-input"
+                  aria-label="Operator identity"
+                  value={actorDraft}
+                  onChange={(event) => setActorDraft(event.target.value)}
+                  onBlur={() => operator.setActor(actorDraft)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      operator.setActor(actorDraft);
+                      event.currentTarget.blur();
+                    }
+                  }}
+                />
+                <select
+                  className="operator-role-select"
+                  aria-label="Operator role"
+                  value={operator.role}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    if (isOperatorRole(next)) operator.setRole(next);
+                  }}
+                >
+                  {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -196,6 +361,7 @@ export function Shell({ overview, mode, onToggleTheme, children }: ShellProps) {
 
         <main className="workspace">{children}</main>
       </div>
+      <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} overview={overview} />
     </div>
   );
 }

@@ -13,8 +13,10 @@ import {
 } from "../api";
 import { InfoGrid, InfoRow, Panel, PageHeader } from "../components";
 import { RiskGauge } from "../components/RiskGauge";
+import { useOperator, useToast } from "../governance";
 import { useApi } from "../hooks";
 import { decisionVariant, fmtMs, titleize } from "../lib";
+import { useRouteParams } from "../router";
 
 const CHANNELS = { web: "Web", mobile: "Mobile", card_present: "Card present", api: "API" };
 
@@ -25,6 +27,9 @@ function randomHex() {
 export function Scoring() {
   const { data: overview } = useApi(getOverview, 8000);
   const { data: workloads, refresh: refreshWorkloads } = useApi(getWorkloads, 10000);
+  const params = useRouteParams();
+  const operator = useOperator();
+  const toast = useToast();
 
   const [transactionId, setTransactionId] = useState(`req-${randomHex()}`);
   const [selectedWorkload, setSelectedWorkload] = useState("");
@@ -44,12 +49,31 @@ export function Scoring() {
 
   const [lookupId, setLookupId] = useState("");
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const decisionParam = params.get("decision");
 
   useEffect(() => {
     if (workloads?.active_workload_id && !selectedWorkload) {
       setSelectedWorkload(workloads.active_workload_id);
     }
   }, [selectedWorkload, workloads?.active_workload_id]);
+
+  useEffect(() => {
+    if (!decisionParam) return;
+    let cancelled = false;
+    setLookupId(decisionParam);
+    getTransaction(decisionParam)
+      .then((record) => {
+        if (cancelled) return;
+        setTrail(record);
+        setLookupError(null);
+      })
+      .catch(() => {
+        if (!cancelled) setLookupError(`No decision found for "${decisionParam}".`);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [decisionParam]);
 
   const workloadItems = useMemo(() => {
     if (!workloads) return {};
@@ -65,15 +89,18 @@ export function Scoring() {
       setWorkloadBusy(value);
       setWorkloadError(null);
       try {
-        await activateWorkload(value);
+        await activateWorkload(value, operator.payload(`Activated workload ${value} from Live Decisions.`));
         await refreshWorkloads();
+        toast.notify({ tone: "success", title: "Workload activated", detail: value });
       } catch (err) {
-        setWorkloadError(err instanceof Error ? err.message : "Could not activate workload");
+        const message = err instanceof Error ? err.message : "Could not activate workload";
+        setWorkloadError(message);
+        toast.notify({ tone: "error", title: "Workload activation failed", detail: message });
       } finally {
         setWorkloadBusy(null);
       }
     },
-    [refreshWorkloads],
+    [operator, refreshWorkloads, toast],
   );
 
   const submit = useCallback(
@@ -131,7 +158,7 @@ export function Scoring() {
       setTrail(record);
       setLookupError(null);
     } catch {
-      setLookupError(`No decision found for “${id}”.`);
+      setLookupError(`No decision found for "${id}".`);
     }
   }, [lookupId]);
 
@@ -159,6 +186,7 @@ export function Scoring() {
                 value={selectedWorkload || workloads?.active_workload_id || ""}
                 onValueChange={(v) => changeWorkload(String(v))}
                 items={workloadItems}
+                disabled={!operator.can("workload.activate")}
               />
               {activeWorkload && (
                 <p className="empty-hint">

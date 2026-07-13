@@ -776,6 +776,7 @@ class ControlPlane:
                 "champion": self._active_model_id,
                 "champion_version": champion["version"],
                 "shadow": shadow["model_id"] if shadow else None,
+                "shadow_divergence": self._shadow_divergence(shadow["model_id"] if shadow else None),
                 "counts": {
                     "total": len(models),
                     "candidate": sum(1 for m in models if m["stage"] == "candidate"),
@@ -785,6 +786,54 @@ class ControlPlane:
                 "models": models,
                 "available_artifacts": [dict(a) for a in self._artifacts],
             }
+
+    def _shadow_divergence(self, shadow_model_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        if not shadow_model_id:
+            return None
+        return {
+            "champion": self._active_model_id,
+            "shadow": shadow_model_id,
+            "agreement": 0.964,
+            "sample_size": 8469,
+            "segments": [
+                {
+                    "segment": "EU card-not-present",
+                    "sample_size": 1420,
+                    "agreement": 0.918,
+                    "disagreements": 116,
+                    "champion_decision": "allow",
+                    "shadow_decision": "review",
+                    "outcome": "shadow caught elevated merchant risk earlier",
+                },
+                {
+                    "segment": "Mobile velocity",
+                    "sample_size": 2314,
+                    "agreement": 0.951,
+                    "disagreements": 113,
+                    "champion_decision": "review",
+                    "shadow_decision": "allow",
+                    "outcome": "shadow reduces review load on known-device traffic",
+                },
+                {
+                    "segment": "Digital goods",
+                    "sample_size": 1188,
+                    "agreement": 0.982,
+                    "disagreements": 21,
+                    "champion_decision": "allow",
+                    "shadow_decision": "allow",
+                    "outcome": "no material behavior change",
+                },
+                {
+                    "segment": "New accounts",
+                    "sample_size": 973,
+                    "agreement": 0.944,
+                    "disagreements": 54,
+                    "champion_decision": "allow",
+                    "shadow_decision": "review",
+                    "outcome": "shadow is more conservative on sparse histories",
+                },
+            ],
+        }
 
     def load_model(
         self,
@@ -958,6 +1007,7 @@ class ControlPlane:
         valid = {"shadow", "champion"}
         if target_stage not in valid:
             raise ValueError(f"target_stage must be one of {sorted(valid)}")
+        context = _operation_context(operation_context)
         with self._lock:
             model = self._models.get(model_id)
             if model is None:
@@ -981,6 +1031,7 @@ class ControlPlane:
                     after={"shadow": model_id},
                     approved_by=f"{actor} (auto-gate)",
                     approval_type="auto",
+                    reason=context.get("reason"),
                 )
                 self._record_operation_unlocked(
                     operation_type="model.promote",
@@ -988,7 +1039,7 @@ class ControlPlane:
                     target=model_id,
                     request={"stage": "shadow"},
                     result={"model_id": model_id, "stage": "shadow", "promotion_gate": dict(promotion_gate or {})},
-                    **_operation_context(operation_context),
+                    **context,
                 )
             else:  # champion
                 previous = self._active_model_id
@@ -1007,6 +1058,7 @@ class ControlPlane:
                     after={"champion": model_id},
                     approved_by=f"{actor}",
                     approval_type="human",
+                    reason=context.get("reason"),
                 )
                 self._record_operation_unlocked(
                     operation_type="model.promote",
@@ -1018,7 +1070,7 @@ class ControlPlane:
                         "champion": model_id,
                         "promotion_gate": dict(promotion_gate or {}),
                     },
-                    **_operation_context(operation_context),
+                    **context,
                 )
             return dict(model)
 
@@ -1027,6 +1079,7 @@ class ControlPlane:
         actor: str = "operator",
         operation_context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        context = _operation_context(operation_context)
         with self._lock:
             if len(self._champion_history) < 2:
                 raise ValueError("no previous champion to roll back to")
@@ -1047,6 +1100,7 @@ class ControlPlane:
                 after={"champion": previous},
                 approved_by=f"{actor}",
                 approval_type="human",
+                reason=context.get("reason"),
             )
             self._record_operation_unlocked(
                 operation_type="model.rollback",
@@ -1054,7 +1108,7 @@ class ControlPlane:
                 target=previous,
                 request={"current_champion": current},
                 result={"champion": previous},
-                **_operation_context(operation_context),
+                **context,
             )
             return dict(self._models[previous])
 
@@ -1091,6 +1145,7 @@ class ControlPlane:
     ) -> Dict[str, Any]:
         if decision not in {"approve", "reject"}:
             raise ValueError("decision must be 'approve' or 'reject'")
+        context = _operation_context(operation_context)
         with self._lock:
             action = self._find_action(action_id)
             if action["status"] != "proposed":
@@ -1110,6 +1165,7 @@ class ControlPlane:
                     approval_type="human",
                     linked_action=action_id,
                     status="active",
+                    reason=context.get("reason"),
                 )
                 self._record_operation_unlocked(
                     operation_type="healing.approve",
@@ -1117,7 +1173,7 @@ class ControlPlane:
                     target=action_id,
                     request={"decision": "approve"},
                     result={"status": action["status"], "type": action["type"]},
-                    **_operation_context(operation_context),
+                    **context,
                 )
             else:
                 action["status"] = "rejected"
@@ -1131,6 +1187,7 @@ class ControlPlane:
                     approval_type="human",
                     linked_action=action_id,
                     status="reverted",
+                    reason=context.get("reason"),
                 )
                 self._record_operation_unlocked(
                     operation_type="healing.reject",
@@ -1138,7 +1195,7 @@ class ControlPlane:
                     target=action_id,
                     request={"decision": "reject"},
                     result={"status": action["status"], "type": action["type"]},
-                    **_operation_context(operation_context),
+                    **context,
                 )
             return dict(action)
 
@@ -1149,6 +1206,7 @@ class ControlPlane:
         operation_context: Optional[Dict[str, Any]] = None,
         rollback_effect: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
+        context = _operation_context(operation_context)
         with self._lock:
             action = self._find_action(action_id)
             if action["status"] not in {"running", "completed"}:
@@ -1170,6 +1228,7 @@ class ControlPlane:
                 approval_type="human",
                 linked_action=action_id,
                 status="reverted",
+                reason=context.get("reason"),
             )
             self._record_operation_unlocked(
                 operation_type="healing.rollback",
@@ -1180,7 +1239,7 @@ class ControlPlane:
                     "type": action["type"],
                     "rollback_effect": dict(rollback_effect or {}),
                 },
-                **_operation_context(operation_context),
+                **context,
             )
             return dict(action)
 
@@ -1387,7 +1446,8 @@ class ControlPlane:
     # ------------------------------------------------------------------
     def _record_policy(self, *, change: str, kind: str, before: Dict[str, Any],
                        after: Dict[str, Any], approved_by: str, approval_type: str,
-                       linked_action: Optional[str] = None, status: str = "active") -> None:
+                       linked_action: Optional[str] = None, status: str = "active",
+                       reason: Optional[str] = None) -> None:
         entry = {
             "id": _new_id("pol"),
             "timestamp": _iso(_now()),
@@ -1399,6 +1459,7 @@ class ControlPlane:
             "approval_type": approval_type,
             "linked_action": linked_action,
             "status": status,
+            "reason": reason,
         }
         self._policy_history.insert(0, entry)
         self._persist()

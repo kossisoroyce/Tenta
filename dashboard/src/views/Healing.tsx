@@ -3,9 +3,11 @@ import { Badge, Button } from "@cloudflare/kumo";
 import { ArrowsClockwiseIcon, CheckIcon, XIcon } from "@phosphor-icons/react";
 
 import { decideHealing, getHealing, rollbackHealing, type HealingAction } from "../api";
-import { ErrorState, LoadingState, PageHeader, StatTile } from "../components";
+import { ErrorState, LoadingState, PageHeader, RefreshMeta, StatTile } from "../components";
+import { ConfirmActionDialog, useOperator, useToast } from "../governance";
 import { useApi } from "../hooks";
 import { fmtInt, healingVariant, relTime, riskVariant, titleize } from "../lib";
+import { navigate, useRouteParams } from "../router";
 
 function ActionCard({
   action,
@@ -13,17 +15,21 @@ function ActionCard({
   onApprove,
   onReject,
   onRollback,
+  canGovern,
+  focused,
 }: {
   action: HealingAction;
   busy: string | null;
   onApprove: () => void;
   onReject: () => void;
   onRollback: () => void;
+  canGovern: boolean;
+  focused: boolean;
 }) {
   const a = action;
   const gateHuman = a.policy_gate === "human_approval_required";
   return (
-    <article className="heal-card">
+    <article className={focused ? "heal-card focused" : "heal-card"}>
       <div className="heal-head">
         <div className="heal-titles">
           <div className="heal-title-row">
@@ -33,11 +39,15 @@ function ActionCard({
           </div>
           <p className="heal-meta">
             {titleize(a.type)} · proposed by <span className="mono">{a.proposed_by}</span> · {relTime(a.proposed_at)}
-            {a.linked_drift && <Badge variant="purple" appearance="dot">drift linked</Badge>}
+            {a.linked_drift && (
+              <button type="button" className="linked-badge" onClick={() => navigate("drift", { focus: a.linked_drift })}>
+                <Badge variant="purple" appearance="dot">drift linked</Badge>
+              </button>
+            )}
           </p>
         </div>
         <div className="heal-actions">
-          {a.status === "proposed" && (
+          {canGovern && a.status === "proposed" && (
             <>
               <Button variant="destructive" size="sm" icon={<XIcon size={14} />} loading={busy === `reject-${a.id}`} onClick={onReject}>
                 Reject
@@ -47,7 +57,7 @@ function ActionCard({
               </Button>
             </>
           )}
-          {(a.status === "running" || a.status === "completed") && (
+          {canGovern && (a.status === "running" || a.status === "completed") && (
             <Button variant="secondary" size="sm" loading={busy === `rollback-${a.id}`} onClick={onRollback}>
               Roll back
             </Button>
@@ -103,24 +113,33 @@ function ActionCard({
 }
 
 export function Healing() {
-  const { data, error, loading, refresh } = useApi(getHealing, 8000);
+  const { data, error, loading, updatedAt, refresh } = useApi(getHealing, 8000);
+  const operator = useOperator();
+  const toast = useToast();
+  const params = useRouteParams();
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmApprove, setConfirmApprove] = useState<HealingAction | null>(null);
 
   const run = useCallback(
-    async (key: string, fn: () => Promise<unknown>) => {
+    async (key: string, fn: () => Promise<unknown>, successTitle: string, successDetail?: string) => {
       setBusy(key);
       setActionError(null);
       try {
         await fn();
         await refresh();
+        toast.notify({ tone: "success", title: successTitle, detail: successDetail });
+        return true;
       } catch (err) {
-        setActionError(err instanceof Error ? err.message : "Action failed");
+        const message = err instanceof Error ? err.message : "Action failed";
+        setActionError(message);
+        toast.notify({ tone: "error", title: "Action failed", detail: message });
+        return false;
       } finally {
         setBusy(null);
       }
     },
-    [refresh],
+    [refresh, toast],
   );
 
   if (loading && !data) return <LoadingState />;
@@ -128,6 +147,19 @@ export function Healing() {
   if (!data) return null;
 
   const c = data.counts;
+  const focus = params.get("focus");
+  const canGovern = operator.can("healing.approve");
+
+  const confirmHealing = async (reason: string) => {
+    if (!confirmApprove) return;
+    const ok = await run(
+      `approve-${confirmApprove.id}`,
+      () => decideHealing(confirmApprove.id, "approve", operator.payload(reason)),
+      "Healing action approved",
+      `${confirmApprove.title} is executing with rollback criteria monitored.`,
+    );
+    if (ok) setConfirmApprove(null);
+  };
 
   return (
     <>
@@ -136,9 +168,12 @@ export function Healing() {
         title="Adaptive healing"
         description="Bounded runtime adaptations from drift, feedback, benchmarks, and policy gates. High-impact changes require human approval."
         actions={
-          <Button variant="ghost" shape="square" aria-label="Refresh" onClick={refresh}>
-            <ArrowsClockwiseIcon size={16} />
-          </Button>
+          <>
+            <Button variant="ghost" shape="square" aria-label="Refresh" onClick={refresh}>
+              <ArrowsClockwiseIcon size={16} />
+            </Button>
+            <RefreshMeta updatedAt={updatedAt} intervalMs={8000} />
+          </>
         }
       />
 
@@ -157,12 +192,47 @@ export function Healing() {
             key={a.id}
             action={a}
             busy={busy}
-            onApprove={() => run(`approve-${a.id}`, () => decideHealing(a.id, "approve"))}
-            onReject={() => run(`reject-${a.id}`, () => decideHealing(a.id, "reject"))}
-            onRollback={() => run(`rollback-${a.id}`, () => rollbackHealing(a.id))}
+            canGovern={canGovern}
+            focused={focus === a.id}
+            onApprove={() => setConfirmApprove(a)}
+            onReject={() =>
+              run(
+                `reject-${a.id}`,
+                () => decideHealing(a.id, "reject", operator.payload("Rejected healing action after operator review.")),
+                "Healing action rejected",
+                a.title,
+              )
+            }
+            onRollback={() =>
+              run(
+                `rollback-${a.id}`,
+                () => rollbackHealing(a.id, operator.payload("Rolled back adaptive healing action from console.")),
+                "Healing action rolled back",
+                a.title,
+              )
+            }
           />
         ))}
       </div>
+
+      <ConfirmActionDialog
+        open={confirmApprove !== null}
+        title="Approve healing action"
+        description="This applies a runtime adaptation and records a human approval in the governance trail."
+        blastRadius={
+          confirmApprove
+            ? `${confirmApprove.title}: ${Object.entries(confirmApprove.estimated_impact)
+                .map(([key, value]) => `${titleize(key)} ${value}`)
+                .join(", ")}.`
+            : "Applies the selected healing action."
+        }
+        confirmText={confirmApprove?.risk === "high" ? confirmApprove.id : undefined}
+        submitLabel="Approve action"
+        tone={confirmApprove?.risk === "high" ? "danger" : "warning"}
+        busy={Boolean(confirmApprove && busy === `approve-${confirmApprove.id}`)}
+        onCancel={() => setConfirmApprove(null)}
+        onConfirm={confirmHealing}
+      />
     </>
   );
 }

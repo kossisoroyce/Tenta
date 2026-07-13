@@ -13,6 +13,7 @@ ROLE_OPERATOR = "operator"
 ROLE_ANALYST = "analyst"
 ROLE_DETECTOR = "detector"
 ROLE_SYSTEM = "system"
+ROLE_VIEWER = "viewer"
 
 VALID_ROLES = {
     ROLE_ADMIN,
@@ -21,6 +22,7 @@ VALID_ROLES = {
     ROLE_ANALYST,
     ROLE_DETECTOR,
     ROLE_SYSTEM,
+    ROLE_VIEWER,
 }
 
 PERMISSIONS: Dict[str, Set[str]] = {
@@ -72,8 +74,15 @@ class ActorContext:
         default_role: Optional[str] = None,
         default_source: str = "api",
     ) -> "ActorContext":
-        actor = str(payload.get("actor") or default_actor).strip() or default_actor
-        role = normalize_role(str(payload.get("role") or default_role or infer_role(actor)))
+        supplied_actor = payload.get("actor")
+        actor = str(supplied_actor or default_actor).strip() or default_actor
+        supplied_role = payload.get("role")
+        if supplied_role:
+            role = normalize_role(str(supplied_role))
+        elif supplied_actor:
+            role = infer_role(actor)
+        else:
+            role = normalize_role(str(default_role or infer_role(actor)))
         source = str(payload.get("source") or default_source).strip() or default_source
         request_id = str(payload.get("request_id") or uuid.uuid4()).strip()
         reason = payload.get("reason")

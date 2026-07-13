@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Text } from "@cloudflare/kumo";
 
 /* -------------------------------- Panel ----------------------------------- */
@@ -79,6 +79,9 @@ interface SparklineProps {
   fill?: string;
   height?: number;
   width?: number;
+  referenceValue?: number;
+  referenceLabel?: string;
+  formatValue?: (value: number) => string;
 }
 
 export function Sparkline({
@@ -87,10 +90,14 @@ export function Sparkline({
   fill = "transparent",
   height = 44,
   width = 160,
+  referenceValue,
+  referenceLabel = "reference",
+  formatValue = (value) => String(value),
 }: SparklineProps) {
   if (data.length < 2) return <div className="sparkline-empty" />;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+  const values = referenceValue === undefined ? data : [...data, referenceValue];
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const range = max - min || 1;
   const stepX = width / (data.length - 1);
   const points = data.map((v, i) => {
@@ -100,10 +107,29 @@ export function Sparkline({
   });
   const line = points.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
   const area = `${line} L${width} ${height} L0 ${height} Z`;
+  const referenceY =
+    referenceValue === undefined
+      ? null
+      : height - 4 - ((referenceValue - min) / range) * (height - 8);
   return (
     <svg className="sparkline" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
       {fill !== "transparent" && <path d={area} fill={fill} stroke="none" />}
+      {referenceY !== null && (
+        <g className="spark-reference">
+          <line x1={0} x2={width} y1={referenceY} y2={referenceY} />
+          <title>
+            {referenceLabel}: {formatValue(referenceValue ?? 0)}
+          </title>
+        </g>
+      )}
       <path d={line} fill="none" stroke={stroke} strokeWidth={1.75} strokeLinejoin="round" />
+      {points.map(([x, y], i) => (
+        <circle className="spark-point" key={`${x}-${i}`} cx={x} cy={y} r={3}>
+          <title>
+            Window {i + 1}: {formatValue(data[i])}
+          </title>
+        </circle>
+      ))}
     </svg>
   );
 }
@@ -175,7 +201,17 @@ export function EmptyState({ title, hint }: { title: string; hint?: string }) {
 }
 
 export function LoadingState() {
-  return <div className="loading-state">Loading…</div>;
+  return (
+    <div className="loading-state" aria-label="Loading">
+      <span className="skeleton-line wide" />
+      <span className="skeleton-line" />
+      <span className="skeleton-grid">
+        <span className="skeleton-box" />
+        <span className="skeleton-box" />
+        <span className="skeleton-box" />
+      </span>
+    </div>
+  );
 }
 
 export function ErrorState({ message }: { message: string }) {
@@ -184,4 +220,33 @@ export function ErrorState({ message }: { message: string }) {
 
 export function Dot({ color }: { color: string }) {
   return <span className="dot" style={{ background: color }} />;
+}
+
+export function RefreshMeta({
+  updatedAt,
+  intervalMs,
+}: {
+  updatedAt?: Date | null;
+  intervalMs?: number;
+}) {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setTick((value) => value + 1), 10000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const seconds = updatedAt ? Math.max(0, Math.round((Date.now() - updatedAt.getTime()) / 1000)) : null;
+  const updated =
+    seconds === null
+      ? "waiting for data"
+      : seconds < 5
+        ? "updated just now"
+        : `updated ${seconds < 60 ? `${seconds}s` : `${Math.round(seconds / 60)}m`} ago`;
+  const interval = intervalMs ? `auto ${Math.round(intervalMs / 1000)}s` : "manual";
+  return (
+    <span className="refresh-meta">
+      {updated} / {interval}
+    </span>
+  );
 }

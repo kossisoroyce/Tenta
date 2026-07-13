@@ -1,6 +1,7 @@
 import { useCallback, useState, type ComponentType } from "react";
 
 import { getOverview } from "./api";
+import { OperatorProvider, ToastProvider } from "./governance";
 import { useApi } from "./hooks";
 import { Shell } from "./Shell";
 import { useRoute, type Route } from "./router";
@@ -45,8 +46,12 @@ export function App() {
   const View = VIEWS[route] ?? Overview;
 
   return (
-    <Shell overview={overview} mode={mode} onToggleTheme={toggleTheme}>
-      <View />
-    </Shell>
+    <OperatorProvider>
+      <ToastProvider>
+        <Shell overview={overview} mode={mode} onToggleTheme={toggleTheme}>
+          <View />
+        </Shell>
+      </ToastProvider>
+    </OperatorProvider>
   );
 }

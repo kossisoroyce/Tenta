@@ -4,6 +4,7 @@ interface ApiState<T> {
   data: T | null;
   error: string | null;
   loading: boolean;
+  updatedAt: Date | null;
   refresh: () => Promise<void>;
 }
 
@@ -12,6 +13,7 @@ export function useApi<T>(fn: () => Promise<T>, intervalMs?: number): ApiState<T
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
   const fnRef = useRef(fn);
   fnRef.current = fn;
 
@@ -20,6 +22,7 @@ export function useApi<T>(fn: () => Promise<T>, intervalMs?: number): ApiState<T
       const result = await fnRef.current();
       setData(result);
       setError(null);
+      setUpdatedAt(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
@@ -34,5 +37,5 @@ export function useApi<T>(fn: () => Promise<T>, intervalMs?: number): ApiState<T
     return () => window.clearInterval(timer);
   }, [refresh, intervalMs]);
 
-  return { data, error, loading, refresh };
+  return { data, error, loading, updatedAt, refresh };
 }

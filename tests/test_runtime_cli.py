@@ -262,6 +262,8 @@ class RuntimeCliTests(unittest.TestCase):
                 "champion",
                 "--url",
                 self.base_url,
+                "--reason",
+                "cli champion promotion test",
             )
             promote_payload = json.loads(promote_output)
             endpoint_output = self._run_cli("model", "endpoint", "--url", self.base_url)

@@ -2,12 +2,13 @@ import { Badge, Button, Table, Text } from "@cloudflare/kumo";
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react";
 
 import { getOverview } from "../api";
-import { Bars, ErrorState, InfoGrid, InfoRow, LoadingState, PageHeader, Panel, StatTile } from "../components";
+import { Bars, ErrorState, InfoGrid, InfoRow, LoadingState, PageHeader, Panel, RefreshMeta, StatTile } from "../components";
 import { useApi } from "../hooks";
 import { decisionVariant, fmtInt, fmtMs, fmtPct, relTime } from "../lib";
+import { navigate } from "../router";
 
 export function Overview() {
-  const { data, error, loading, refresh } = useApi(getOverview, 5000);
+  const { data, error, loading, updatedAt, refresh } = useApi(getOverview, 5000);
 
   if (loading && !data) return <LoadingState />;
   if (error && !data) return <ErrorState message={error} />;
@@ -30,9 +31,12 @@ export function Overview() {
         title="Production decision control"
         description="Runtime health, decision throughput, policy compliance, and the adaptive changes currently in flight."
         actions={
-          <Button variant="secondary" icon={<ArrowsClockwiseIcon size={16} />} onClick={refresh}>
-            Refresh
-          </Button>
+          <>
+            <Button variant="secondary" icon={<ArrowsClockwiseIcon size={16} />} onClick={refresh}>
+              Refresh
+            </Button>
+            <RefreshMeta updatedAt={updatedAt} intervalMs={5000} />
+          </>
         }
       />
 
@@ -136,7 +140,11 @@ export function Overview() {
               </Table.Header>
               <Table.Body>
                 {recent.map((row, i) => (
-                  <Table.Row key={`${row.decision_request_id ?? row.transaction_id}-${i}`}>
+                  <Table.Row
+                    key={`${row.decision_request_id ?? row.transaction_id}-${i}`}
+                    className="clickable-row"
+                    onClick={() => navigate("scoring", { decision: row.decision_request_id ?? row.transaction_id })}
+                  >
                     <Table.Cell>
                       <span className="mono">{row.decision_request_id ?? row.transaction_id}</span>
                     </Table.Cell>

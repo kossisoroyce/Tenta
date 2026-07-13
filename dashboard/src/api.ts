@@ -11,7 +11,13 @@ export type HealingStatus =
   | "rejected"
   | "rolled_back";
 
-const ACTOR = "operator@console";
+export interface ActorPayload {
+  actor: string;
+  role?: string;
+  source?: string;
+  request_id?: string;
+  reason?: string;
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, options);
@@ -28,7 +34,7 @@ function post<T>(path: string, body?: object): Promise<T> {
   return request<T>(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ actor: ACTOR, ...(body ?? {}) }),
+    body: JSON.stringify(body ?? {}),
   });
 }
 
@@ -173,10 +179,27 @@ export interface ModelsResponse {
   champion: string;
   champion_version: string;
   shadow: string | null;
+  shadow_divergence: ShadowDivergence | null;
   counts: { total: number; candidate: number; shadow: number; archived: number };
   models: ModelRecord[];
   available_artifacts: Artifact[];
   serving_endpoint: ServingEndpoint;
+}
+
+export interface ShadowDivergence {
+  champion: string;
+  shadow: string;
+  agreement: number;
+  sample_size: number;
+  segments: Array<{
+    segment: string;
+    sample_size: number;
+    agreement: number;
+    disagreements: number;
+    champion_decision: string;
+    shadow_decision: string;
+    outcome: string;
+  }>;
 }
 
 /* --------------------------------- Healing --------------------------------- */
@@ -245,6 +268,7 @@ export interface PolicyEntry {
   approval_type: "auto" | "human";
   linked_action: string | null;
   status: string;
+  reason?: string | null;
 }
 
 export interface WorkloadFeature {
@@ -425,7 +449,8 @@ export const postScore = (body: ScoreRequest) => post<ScoreResponse>("/v1/decisi
 
 export const getModels = () => request<ModelsResponse>("/v1/models");
 export const getServingEndpoint = () => request<ServingEndpoint>("/v1/serving-endpoint");
-export const loadModel = (artifact_id: string) => post<ModelRecord>("/v1/models/load", { artifact_id });
+export const loadModel = (artifact_id: string, actor?: ActorPayload) =>
+  post<ModelRecord>("/v1/models/load", { artifact_id, ...(actor ?? {}) });
 export interface UploadSpec {
   model_id: string;
   version: string;
@@ -433,54 +458,49 @@ export interface UploadSpec {
   filename?: string;
   size_mb?: number;
 }
-export const uploadModel = (spec: UploadSpec) => post<ModelRecord>("/v1/models/upload", spec);
-export const promoteModel = (id: string, stage: "shadow" | "champion") =>
-  post<ModelRecord>(`/v1/models/${encodeURIComponent(id)}/promote`, { stage });
-export const rollbackModel = () => post<ModelRecord>("/v1/models/rollback");
+export const uploadModel = (spec: UploadSpec, actor?: ActorPayload) =>
+  post<ModelRecord>("/v1/models/upload", { ...spec, ...(actor ?? {}) });
+export const promoteModel = (id: string, stage: "shadow" | "champion", actor?: ActorPayload) =>
+  post<ModelRecord>(`/v1/models/${encodeURIComponent(id)}/promote`, { stage, ...(actor ?? {}) });
+export const rollbackModel = (actor?: ActorPayload) => post<ModelRecord>("/v1/models/rollback", actor);
 
 export const getHealing = () => request<HealingResponse>("/v1/healing/actions");
-export const decideHealing = (id: string, decision: "approve" | "reject") =>
-  post<HealingAction>(`/v1/healing/actions/${encodeURIComponent(id)}/${decision}`);
-export const rollbackHealing = (id: string) =>
-  post<HealingAction>(`/v1/healing/actions/${encodeURIComponent(id)}/rollback`);
+export const decideHealing = (id: string, decision: "approve" | "reject", actor?: ActorPayload) =>
+  post<HealingAction>(`/v1/healing/actions/${encodeURIComponent(id)}/${decision}`, actor);
+export const rollbackHealing = (id: string, actor?: ActorPayload) =>
+  post<HealingAction>(`/v1/healing/actions/${encodeURIComponent(id)}/rollback`, actor);
 
 export const getDrift = () => request<DriftResponse>("/v1/drift");
-export const updateDrift = (id: string, action: "acknowledge" | "escalate") =>
-  post<DriftMonitor>(`/v1/drift/${encodeURIComponent(id)}/${action}`);
+export const updateDrift = (id: string, action: "acknowledge" | "escalate", actor?: ActorPayload) =>
+  post<DriftMonitor>(`/v1/drift/${encodeURIComponent(id)}/${action}`, actor);
 
 export const getPolicyHistory = () => request<{ entries: PolicyEntry[] }>("/v1/policy/history");
 export const getWorkloads = () => request<WorkloadsResponse>("/v1/workloads");
 export const getActiveWorkload = () => request<WorkloadSpec>("/v1/workloads/active");
-export const activateWorkload = (workload_id: string) =>
+export const activateWorkload = (workload_id: string, actor?: ActorPayload) =>
   post<{ active: WorkloadSpec; operation: OperationEvent }>("/v1/workloads/activate", {
     workload_id,
-    role: "model-risk",
-    source: "dashboard",
-    request_id: `workload-${Date.now()}`,
     reason: "Dashboard workload activation",
+    ...(actor ?? {}),
   });
 export const getOperations = (limit = 30) =>
   request<{ operations: OperationEvent[]; limit: number }>(`/v1/operations?limit=${limit}`);
 export const getAuditIntegrity = () => request<AuditIntegrityResponse>("/v1/audit/integrity");
 export const getDatabaseStatus = () => request<DatabaseStatusResponse>("/v1/database/status");
-export const provisionSQLite = () =>
+export const provisionSQLite = (actor?: ActorPayload) =>
   post<ProvisionDatabaseResponse>("/v1/database/provision", {
     backend: "sqlite",
     path: "data/tenta.sqlite3",
     persist: true,
-    role: "model-risk",
-    source: "dashboard",
-    request_id: `db-sqlite-${Date.now()}`,
     reason: "Dashboard SQLite provision",
+    ...(actor ?? {}),
   });
-export const provisionPostgres = () =>
+export const provisionPostgres = (actor?: ActorPayload) =>
   post<ProvisionDatabaseResponse>("/v1/database/provision", {
     backend: "postgres",
     persist: true,
-    role: "model-risk",
-    source: "dashboard",
-    request_id: `db-postgres-${Date.now()}`,
     reason: "Dashboard Postgres provision",
+    ...(actor ?? {}),
   });
 export const getFeedback = () => request<FeedbackResponse>("/v1/feedback");
 export const getBenchmarks = () => request<BenchmarksResponse>("/v1/benchmarks");

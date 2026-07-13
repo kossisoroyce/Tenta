@@ -44,7 +44,16 @@ export function Benchmarks() {
       <div className="grid-2 align-start">
         <Panel eyebrow="Decision path" title="Latency (last 12 windows)">
           <div className="chart-block">
-            <Sparkline data={data.latency_trend} stroke="var(--color-kumo-brand)" fill="var(--spark-fill)" height={80} width={360} />
+            <Sparkline
+              data={data.latency_trend}
+              stroke="var(--color-kumo-brand)"
+              fill="var(--spark-fill)"
+              height={80}
+              width={360}
+              referenceValue={data.slo_p99_ms}
+              referenceLabel="p99 SLO"
+              formatValue={fmtMs}
+            />
           </div>
           <div className="metric-inline">
             <div><span className="muted">p50</span> <b className="mono">{fmtMs(data.latency_ms.p50)}</b></div>
@@ -61,7 +70,14 @@ export function Benchmarks() {
 
         <Panel eyebrow="Volume" title="Throughput (last 12 windows)">
           <div className="chart-block">
-            <Sparkline data={data.throughput_trend} stroke="var(--color-kumo-info)" fill="var(--spark-fill-info)" height={80} width={360} />
+            <Sparkline
+              data={data.throughput_trend}
+              stroke="var(--color-kumo-info)"
+              fill="var(--spark-fill-info)"
+              height={80}
+              width={360}
+              formatValue={(value) => `${fmtInt(value)} tps`}
+            />
           </div>
           <div className="metric-inline">
             <div><span className="muted">current</span> <b className="mono">{fmtInt(data.throughput_tps)} tps</b></div>

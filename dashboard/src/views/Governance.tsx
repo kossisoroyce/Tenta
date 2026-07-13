@@ -8,9 +8,10 @@ import {
   getPolicyHistory,
   type AuditChainReport,
 } from "../api";
-import { ErrorState, InfoGrid, InfoRow, LoadingState, PageHeader, Panel, StatTile } from "../components";
+import { ErrorState, InfoGrid, InfoRow, LoadingState, PageHeader, Panel, RefreshMeta, StatTile } from "../components";
 import { useApi } from "../hooks";
 import { fmtInt, relTime, runtimeStatusVariant, titleize } from "../lib";
+import { navigate } from "../router";
 
 function summarize(record: Record<string, unknown>): string {
   const entries = Object.entries(record);
@@ -101,9 +102,12 @@ export function Governance() {
         title="Audit, approvals & operation ledger"
         description="Policy changes, database provisioning, model promotions, healing actions, feedback writes, and integrity status in one place."
         actions={
-          <Button variant="ghost" shape="square" aria-label="Refresh" onClick={refreshAll}>
-            <ArrowsClockwiseIcon size={16} />
-          </Button>
+          <>
+            <Button variant="ghost" shape="square" aria-label="Refresh" onClick={refreshAll}>
+              <ArrowsClockwiseIcon size={16} />
+            </Button>
+            <RefreshMeta updatedAt={policy.updatedAt ?? operations.updatedAt ?? integrity.updatedAt} intervalMs={8000} />
+          </>
         }
       />
 
@@ -238,7 +242,12 @@ export function Governance() {
                     <span className="kind-chip">{titleize(entry.kind)}</span>
                     <span className="mono">{entry.approved_by}</span>
                     <span className="muted">{relTime(entry.timestamp)}</span>
-                    {entry.linked_action && <span className="muted">· action {entry.linked_action}</span>}
+                    {entry.reason && <span className="reason-chip">{entry.reason}</span>}
+                    {entry.linked_action && (
+                      <button type="button" className="timeline-link" onClick={() => navigate("healing", { focus: entry.linked_action })}>
+                        action {entry.linked_action}
+                      </button>
+                    )}
                   </div>
                 </div>
               </li>

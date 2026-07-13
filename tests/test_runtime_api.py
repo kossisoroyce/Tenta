@@ -242,6 +242,7 @@ class RuntimeApiTests(unittest.TestCase):
                 "actor": "casey@example.com",
                 "role": "model-risk",
                 "request_id": "req-model-promote",
+                "reason": "passed replay and rollback plan reviewed",
             },
         )
 
@@ -252,6 +253,8 @@ class RuntimeApiTests(unittest.TestCase):
         operations = self._get_json("/v1/operations?limit=1")
         self.assertEqual(operations["operations"][0]["operation_type"], "model.promote")
         self.assertEqual(operations["operations"][0]["request_id"], "req-model-promote")
+        history = self._get_json("/v1/policy/history")
+        self.assertEqual(history["entries"][0]["reason"], "passed replay and rollback plan reviewed")
 
     def test_register_timber_manifest_and_promote_after_gates(self):
         manifest = self._write_manifest("decision-risk-xgb-v14")
@@ -279,6 +282,7 @@ class RuntimeApiTests(unittest.TestCase):
                 "actor": "casey@example.com",
                 "role": "model-risk",
                 "request_id": "req-model-manifest-promote",
+                "reason": "manifest gates passed in unit test",
             },
         )
 
@@ -565,6 +569,8 @@ class RuntimeApiTests(unittest.TestCase):
         self.assertEqual(operations["operations"][0]["source"], "approval-console")
         self.assertEqual(operations["operations"][0]["request_id"], "req-approve-context")
         self.assertEqual(operations["operations"][0]["reason"], "validated replay")
+        history = self._get_json("/v1/policy/history")
+        self.assertEqual(history["entries"][0]["reason"], "validated replay")
 
     def test_threshold_healing_execution_and_rollback_changes_policy(self):
         approved = self._post_json(
@@ -573,6 +579,7 @@ class RuntimeApiTests(unittest.TestCase):
                 "actor": "casey@example.com",
                 "role": "model-risk",
                 "request_id": "req-threshold-execute",
+                "reason": "bounded review-threshold recovery for mobile drift",
             },
         )
 
