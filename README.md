@@ -33,6 +33,8 @@ needs context, control, and a durable record.
   fixtures.
 - Timber artifact manifest registration with hash/signature/workload/replay
   promotion gates.
+- Self-contained local auth: first-run admin bootstrap, session cookies, local
+  users, and hashed API keys stored with the runtime.
 - SQLite-first persistence with optional local Postgres provisioning.
 - Hash-chained decision and operation ledgers.
 - Persistent control-plane state for models, drift, healing, feedback,
@@ -67,12 +69,33 @@ tenta serve --host 127.0.0.1 --port 8080
 ```
 
 Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) for the dashboard.
+On first run, Tenta asks you to create the local admin account. Users, sessions,
+API keys, and auth events are stored in the configured local SQLite/Postgres
+database, so local and VPS deployments stay self-contained.
 
 During local development you can also run without installing:
 
 ```bash
 PYTHONPATH=runtime python3 -m tenta_runtime serve --host 127.0.0.1 --port 8080
 ```
+
+## Local Auth And API Keys
+
+After the first admin account exists, console/control-plane APIs require either
+the dashboard session cookie or an API key. The app-facing decision endpoint
+still accepts application traffic at `/v1/decision-requests`.
+
+Create API keys from the dashboard under **Governance -> API keys**. The token
+is shown once. For CLI and automation:
+
+```bash
+export TENTA_API_KEY='tenta_key_...'
+tenta model list --url http://127.0.0.1:8080
+```
+
+The runtime stores only token hashes. Passwords use stdlib `scrypt` with random
+salt; no external auth provider is required. Optional OIDC can be layered on
+later, but local/VPS auth works out of the box.
 
 ## Make A Decision
 
@@ -82,7 +105,9 @@ policy, audit, idempotency, workload validation, and rollback in the path.
 
 ```bash
 tenta model register examples/decision-risk-v14.tenta.json --url http://127.0.0.1:8080
-tenta model promote decision-risk-xgb-v14 --stage champion --url http://127.0.0.1:8080
+tenta model promote decision-risk-xgb-v14 --stage champion \
+  --reason "Validated replay and rollback plan" \
+  --url http://127.0.0.1:8080
 tenta endpoint --url http://127.0.0.1:8080
 ```
 
@@ -184,6 +209,7 @@ tenta replay run --url http://127.0.0.1:8080
 Storage can be provisioned from the CLI or dashboard using the same runtime API:
 
 ```bash
+export TENTA_API_KEY='tenta_key_...'
 tenta db status --url http://127.0.0.1:8080
 tenta db provision-sqlite --path data/tenta.sqlite3 --url http://127.0.0.1:8080
 pip install -e '.[postgres]'
@@ -194,6 +220,11 @@ tenta db provision-postgres --url http://127.0.0.1:8080
 
 | Method | Path | Purpose |
 | --- | --- | --- |
+| `GET` | `/v1/auth/status` | Local auth bootstrap/session status |
+| `POST` | `/v1/auth/bootstrap` | Create the first local admin |
+| `POST` | `/v1/auth/login` | Create an HttpOnly console session |
+| `GET` | `/v1/auth/me` | Return the authenticated local user |
+| `POST` | `/v1/auth/api-keys` | Mint a hashed API key |
 | `GET` | `/v1/health` | Runtime and dependency health |
 | `GET` | `/v1/serving-endpoint` | Current app-facing model endpoint |
 | `POST` | `/v1/decision-requests` | Score and persist a decision |
@@ -251,10 +282,11 @@ the production dashboard from the runtime.
 ## Project Status
 
 Tenta is pre-release. The core engine, local dashboard, storage provisioning,
-workload registry, app-facing serving endpoint discovery, replay fixtures, and
-audit integrity checks are working. The next major push is hardening the
-extension surface: production model adapters, packaging polish, SDK ergonomics,
-signed artifact loading, deeper benchmarks, and deployment automation.
+local auth, workload registry, model promotion gates, app-facing serving
+endpoint discovery, replay fixtures, and audit integrity checks are working.
+The next major push is hardening the extension surface: production model
+adapters, packaging polish, SDK ergonomics, deeper benchmarks, and deployment
+automation.
 
 ## License
 

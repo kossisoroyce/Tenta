@@ -2,6 +2,85 @@
 
 This page defines the initial API surface. Endpoint names are provisional.
 
+## Local Auth API
+
+Tenta is self-contained for local and VPS deployments. Once the first admin is
+created, console/control-plane endpoints require either an HttpOnly dashboard
+session cookie or a bearer API key. The app-facing decision endpoint remains
+stable at `/v1/decision-requests`.
+
+### `GET /v1/auth/status`
+
+Returns whether auth is configured and whether first-run bootstrap is still
+needed.
+
+```json
+{
+  "enabled": true,
+  "users_configured": false,
+  "needs_bootstrap": true,
+  "cookie_name": "tenta_session",
+  "password_hasher": "scrypt"
+}
+```
+
+### `POST /v1/auth/bootstrap`
+
+Creates the first local admin user and sets the dashboard session cookie. This
+endpoint is only available while no users exist.
+
+```json
+{
+  "email": "admin@tenta.local",
+  "display_name": "Administrator",
+  "password": "correct horse battery staple"
+}
+```
+
+### `POST /v1/auth/login`
+
+Creates an HttpOnly `tenta_session` cookie for the dashboard.
+
+```json
+{
+  "email": "admin@tenta.local",
+  "password": "correct horse battery staple"
+}
+```
+
+### `GET /v1/auth/me`
+
+Returns the authenticated user and role.
+
+### `POST /v1/auth/logout`
+
+Clears the dashboard session cookie and deletes the local session record.
+
+### `GET /v1/auth/api-keys`
+
+Lists hashed API keys for the authenticated user. Raw tokens are never returned
+after creation.
+
+### `POST /v1/auth/api-keys`
+
+Creates an API key for CLI or automation. The response includes the raw token
+once.
+
+```json
+{
+  "label": "CLI access",
+  "role": "model-risk"
+}
+```
+
+CLI commands automatically send `Authorization: Bearer ...` when
+`TENTA_API_KEY` is set.
+
+```bash
+export TENTA_API_KEY='tenta_key_...'
+tenta model list --url http://127.0.0.1:8080
+```
+
 ## Decision Runtime API
 
 ### `POST /v1/decision-requests`
@@ -275,6 +354,10 @@ When `persist` is true, the runtime writes the selected storage URL to
 These endpoints are backed by the runtime control plane and are used by the
 dashboard/console. State is persisted through the configured runtime storage
 backend.
+
+After local auth bootstrap, console endpoints require a dashboard session or
+bearer API key. The server derives `actor`, `role`, and `source` from the
+authenticated principal and overwrites spoofed request-body identity fields.
 
 Mutating requests accept governance metadata:
 

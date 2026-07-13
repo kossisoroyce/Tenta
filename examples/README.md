@@ -10,6 +10,13 @@ Start the runtime, then send a sample decision request:
 tenta serve --host 127.0.0.1 --port 8080
 ```
 
+Open the dashboard and create the first local admin. For CLI commands that
+change control-plane state, create an API key under Governance and export it:
+
+```bash
+export TENTA_API_KEY='tenta_key_...'
+```
+
 ```bash
 curl -s http://127.0.0.1:8080/v1/decision-requests \
   -H 'Content-Type: application/json' \
@@ -30,7 +37,9 @@ feature contract, and replay pack before promotion.
 
 ```bash
 tenta model register examples/decision-risk-v14.tenta.json --url http://127.0.0.1:8080
-tenta model promote decision-risk-xgb-v14 --stage champion --url http://127.0.0.1:8080
+tenta model promote decision-risk-xgb-v14 --stage champion \
+  --reason "Validated replay and rollback plan" \
+  --url http://127.0.0.1:8080
 tenta endpoint --url http://127.0.0.1:8080
 ```
 
