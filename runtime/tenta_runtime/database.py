@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from importlib.util import find_spec
 from typing import Any, Callable, Dict, List, Optional
 
+from .auth import LocalAuthService, create_auth_store
 from .control_plane import ControlPlane
 from .control_plane_store import create_control_plane_store
 from .engine import RuntimeEngine
@@ -56,11 +57,13 @@ class DatabaseProvisioner:
         engine: RuntimeEngine,
         config_path: str = DEFAULT_CONFIG_PATH,
         control_plane: Optional[ControlPlane] = None,
+        auth: Optional[LocalAuthService] = None,
         command_runner: Optional[CommandRunner] = None,
     ) -> None:
         self.engine = engine
         self.config_path = config_path
         self.control_plane = control_plane
+        self.auth = auth
         self.command_runner = command_runner
 
     def status(self) -> Dict[str, Any]:
@@ -211,6 +214,10 @@ class DatabaseProvisioner:
         if self.control_plane is not None and control_plane_store is not None:
             self.control_plane.replace_store(control_plane_store)
             control_plane_health = self.control_plane.persistence_health()
+        auth_health = None
+        if self.auth is not None:
+            self.auth.replace_store(create_auth_store(storage_url))
+            auth_health = self.auth.status()["storage"]
         if persist:
             existing = load_runtime_config(self.config_path)
             save_runtime_config(
@@ -230,6 +237,7 @@ class DatabaseProvisioner:
             result = {
                 "storage": storage_health,
                 "control_plane": control_plane_health,
+                "auth": auth_health,
                 "config_path": self.config_path if persist else None,
             }
             if provisioning is not None:
@@ -253,6 +261,7 @@ class DatabaseProvisioner:
             "storage_url": _redact_storage_url(storage_url),
             "storage": storage_health,
             "control_plane": control_plane_health,
+            "auth": auth_health,
             "operation": operation_event,
             "provisioning": provisioning,
             "config_path": self.config_path if persist else None,

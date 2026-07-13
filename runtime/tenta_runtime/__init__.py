@@ -2,6 +2,7 @@
 
 from .audit import DecisionEvent, InMemoryAuditSink, JsonlAuditSink
 from .artifacts import ArtifactValidationError, TimberArtifactManifest, load_timber_manifest, sha256_file
+from .auth import AuthError, AuthPrincipal, InMemoryAuthStore, LocalAuthService, SQLiteAuthStore, create_auth_store
 from .client import TentaClient, TentaClientError
 from .control_plane import ControlPlane, RegistryModelWrapper
 from .control_plane_store import (
@@ -60,6 +61,8 @@ __all__ = [
     "DecisionEvent",
     "DecisionPolicy",
     "ActorContext",
+    "AuthError",
+    "AuthPrincipal",
     "ArtifactValidationError",
     "ControlPlaneStore",
     "ControlPlane",
@@ -76,9 +79,11 @@ __all__ = [
     "GovernanceError",
     "HealingExecutor",
     "InMemoryAuditSink",
+    "InMemoryAuthStore",
     "InMemoryControlPlaneStore",
     "InMemoryRuntimeStore",
     "JsonlAuditSink",
+    "LocalAuthService",
     "ModelPrediction",
     "OperationEvent",
     "PayloadValidationError",
@@ -97,8 +102,10 @@ __all__ = [
     "TimberModelWrapper",
     "CachedDecision",
     "SQLiteControlPlaneStore",
+    "SQLiteAuthStore",
     "SQLiteRuntimeStore",
     "combine_reports",
+    "create_auth_store",
     "create_control_plane_store",
     "create_runtime_store",
     "storage_url_from_options",

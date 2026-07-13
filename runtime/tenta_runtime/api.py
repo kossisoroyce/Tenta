@@ -7,10 +7,12 @@ import json
 import mimetypes
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, unquote, urlparse
 from typing import Any, Dict, Optional, Type
 
 from .audit import CompositeAuditSink, InMemoryAuditSink, JsonlAuditSink
+from .auth import AUTH_COOKIE_NAME, AuthError, InvalidCredentials, LocalAuthService, create_auth_store
 from .console_api import ConsoleRoutes
 from .control_plane import ControlPlane, RegistryModelWrapper
 from .control_plane_store import create_control_plane_store
@@ -58,6 +60,7 @@ def make_handler(
     static_dir: Optional[Path] = None,
     console: Optional[ConsoleRoutes] = None,
     database: Optional[DatabaseProvisioner] = None,
+    auth: Optional[LocalAuthService] = None,
 ) -> Type[BaseHTTPRequestHandler]:
     dashboard_dir = Path(static_dir) if static_dir is not None else default_static_dir()
 
@@ -67,13 +70,22 @@ def make_handler(
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
 
+            if auth is not None and parsed.path.startswith("/v1/auth"):
+                self._handle_auth_get(parsed)
+                return
+
+            auth_principal = self._auth_principal() if auth is not None else None
+            if self._requires_auth("GET", parsed.path) and auth_principal is None:
+                self._send_json(401, {"error": "unauthorized", "message": "authentication required"})
+                return
+
             if console is not None:
                 result = console.dispatch(
                     "GET",
                     parsed.path,
                     None,
                     parse_qs(parsed.query),
-                    request_context={"base_url": self._request_base_url()},
+                    request_context={"base_url": self._request_base_url(), "auth_principal": _principal_payload(auth_principal)},
                 )
                 if result is not None:
                     self._send_json(result[0], result[1])
@@ -136,12 +148,23 @@ def make_handler(
                 self._send_json(422, {"error": "validation_error", "message": str(exc)})
                 return
 
+            if auth is not None and parsed.path.startswith("/v1/auth"):
+                self._handle_auth_post(parsed, payload)
+                return
+
+            auth_principal = self._auth_principal() if auth is not None else None
+            if self._requires_auth("POST", parsed.path) and auth_principal is None:
+                self._send_json(401, {"error": "unauthorized", "message": "authentication required"})
+                return
+            if auth_principal is not None:
+                payload = {**payload, **auth_principal.actor_payload()}
+
             if console is not None:
                 result = console.dispatch(
                     "POST",
                     parsed.path,
                     payload,
-                    request_context={"base_url": self._request_base_url()},
+                    request_context={"base_url": self._request_base_url(), "auth_principal": _principal_payload(auth_principal)},
                 )
                 if result is not None:
                     self._send_json(result[0], result[1])
@@ -198,10 +221,95 @@ def make_handler(
                 raise PayloadValidationError("request body must be a JSON object")
             return payload
 
-        def _send_json(self, status: int, payload: Dict[str, Any]) -> None:
+        def _handle_auth_get(self, parsed: Any) -> None:
+            if auth is None:
+                self._send_json(404, {"error": "not_found", "message": "auth is not configured"})
+                return
+            if parsed.path == "/v1/auth/status":
+                self._send_json(200, auth.status())
+                return
+            if parsed.path == "/v1/auth/me":
+                principal = self._auth_principal()
+                if principal is None:
+                    self._send_json(401, {"error": "unauthorized", "message": "authentication required"})
+                    return
+                self._send_json(200, {"user": principal.to_dict()})
+                return
+            if parsed.path == "/v1/auth/api-keys":
+                principal = self._auth_principal()
+                if principal is None:
+                    self._send_json(401, {"error": "unauthorized", "message": "authentication required"})
+                    return
+                self._send_json(200, {"api_keys": auth.list_api_keys(principal)})
+                return
+            self._send_json(404, {"error": "not_found", "message": "auth endpoint not found"})
+
+        def _handle_auth_post(self, parsed: Any, payload: Dict[str, Any]) -> None:
+            if auth is None:
+                self._send_json(404, {"error": "not_found", "message": "auth is not configured"})
+                return
+            try:
+                if parsed.path == "/v1/auth/bootstrap":
+                    result = auth.bootstrap(
+                        email=str(payload.get("email") or ""),
+                        password=str(payload.get("password") or ""),
+                        display_name=str(payload.get("display_name") or "Administrator"),
+                        user_agent=self.headers.get("User-Agent"),
+                        ip_address=self.client_address[0],
+                    )
+                    self._send_json(200, {"user": result["user"]}, extra_headers=[self._session_cookie(result["session_token"])])
+                    return
+                if parsed.path == "/v1/auth/login":
+                    result = auth.login(
+                        email=str(payload.get("email") or ""),
+                        password=str(payload.get("password") or ""),
+                        user_agent=self.headers.get("User-Agent"),
+                        ip_address=self.client_address[0],
+                    )
+                    self._send_json(200, {"user": result["user"]}, extra_headers=[self._session_cookie(result["session_token"])])
+                    return
+                if parsed.path == "/v1/auth/logout":
+                    auth.logout(self._session_cookie_value(), user_agent=self.headers.get("User-Agent"), ip_address=self.client_address[0])
+                    self._send_json(200, {"status": "logged_out"}, extra_headers=[self._expired_session_cookie()])
+                    return
+                if parsed.path == "/v1/auth/api-keys":
+                    principal = self._auth_principal()
+                    if principal is None:
+                        self._send_json(401, {"error": "unauthorized", "message": "authentication required"})
+                        return
+                    result = auth.create_api_key(
+                        principal,
+                        label=str(payload.get("label") or "API key"),
+                        role=str(payload.get("role") or principal.role),
+                        expires_at=payload.get("expires_at"),
+                    )
+                    self._send_json(200, result)
+                    return
+                if parsed.path.startswith("/v1/auth/api-keys/") and parsed.path.endswith("/revoke"):
+                    principal = self._auth_principal()
+                    if principal is None:
+                        self._send_json(401, {"error": "unauthorized", "message": "authentication required"})
+                        return
+                    key_id = unquote(parsed.path[len("/v1/auth/api-keys/"):-len("/revoke")])
+                    self._send_json(200, {"api_key": auth.revoke_api_key(principal, key_id)})
+                    return
+            except InvalidCredentials as exc:
+                self._send_json(401, {"error": "invalid_credentials", "message": str(exc)})
+                return
+            except AuthError as exc:
+                self._send_json(422, {"error": "auth_error", "message": str(exc)})
+                return
+            except KeyError as exc:
+                self._send_json(404, {"error": "not_found", "message": str(exc).strip("'")})
+                return
+            self._send_json(404, {"error": "not_found", "message": "auth endpoint not found"})
+
+        def _send_json(self, status: int, payload: Dict[str, Any], extra_headers: Optional[list[tuple[str, str]]] = None) -> None:
             encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
             self.send_response(status)
             self._send_common_headers("application/json", len(encoded))
+            for key, value in extra_headers or []:
+                self.send_header(key, value)
             self.end_headers()
             self.wfile.write(encoded)
 
@@ -233,7 +341,56 @@ def make_handler(
             self.send_header("Content-Length", str(content_length))
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+        def _requires_auth(self, method: str, path: str) -> bool:
+            if auth is None or not auth.status()["users_configured"]:
+                return False
+            if path.startswith("/v1/auth"):
+                return False
+            if path in {"/v1/health", "/v1/serving-endpoint"}:
+                return False
+            if method == "POST" and path in {"/v1/score", "/v1/decision-requests"}:
+                return False
+            return path.startswith("/v1/")
+
+        def _auth_principal(self) -> Any:
+            if auth is None:
+                return None
+            bearer = self._bearer_token()
+            if bearer:
+                principal = auth.authenticate_api_key(bearer)
+                if principal is not None:
+                    return principal
+            return auth.authenticate_session(self._session_cookie_value())
+
+        def _bearer_token(self) -> Optional[str]:
+            header = self.headers.get("Authorization") or ""
+            if not header.lower().startswith("bearer "):
+                return None
+            return header.split(" ", 1)[1].strip()
+
+        def _session_cookie_value(self) -> Optional[str]:
+            raw = self.headers.get("Cookie")
+            if not raw:
+                return None
+            cookie = SimpleCookie()
+            cookie.load(raw)
+            morsel = cookie.get(AUTH_COOKIE_NAME)
+            return morsel.value if morsel else None
+
+        def _session_cookie(self, token: str) -> tuple[str, str]:
+            secure = "; Secure" if self._request_base_url().startswith("https://") else ""
+            return (
+                "Set-Cookie",
+                f"{AUTH_COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={12 * 60 * 60}{secure}",
+            )
+
+        def _expired_session_cookie(self) -> tuple[str, str]:
+            return (
+                "Set-Cookie",
+                f"{AUTH_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0",
+            )
 
         def _request_base_url(self) -> str:
             proto = (self.headers.get("X-Forwarded-Proto") or "http").split(",")[0].strip() or "http"
@@ -301,6 +458,10 @@ def _provision_database(
     if payload.get("storage_url"):
         return database.connect(storage_url=str(payload["storage_url"]), persist=persist, **metadata)
     raise ValueError("backend must be sqlite or postgres")
+
+
+def _principal_payload(principal: Any) -> Optional[Dict[str, Any]]:
+    return principal.to_dict() if principal is not None else None
 
 
 def _authorize_database(database: DatabaseProvisioner, payload: Dict[str, Any]) -> ActorContext:
@@ -371,6 +532,7 @@ def run(
         active_workload_id=config.active_workload_id,
     )
     control_plane = ControlPlane(store=create_control_plane_store(resolved_storage_url))
+    auth_service = LocalAuthService(create_auth_store(resolved_storage_url))
     # The live scorer tracks the control plane's champion so model promotion
     # actually changes production scoring.
     engine.model = RegistryModelWrapper(control_plane)
@@ -380,8 +542,8 @@ def run(
         config_path="data/tenta-runtime.json",
         workload_dir=DEFAULT_USER_WORKLOAD_DIR,
     )
-    database = DatabaseProvisioner(engine, control_plane=control_plane)
-    server = HTTPServer((host, port), make_handler(engine, console=console, database=database))
+    database = DatabaseProvisioner(engine, control_plane=control_plane, auth=auth_service)
+    server = HTTPServer((host, port), make_handler(engine, console=console, database=database, auth=auth_service))
     print(f"Tenta runtime listening on http://{host}:{port}")
     print(f"Tenta dashboard available at http://{host}:{port}/")
     try:

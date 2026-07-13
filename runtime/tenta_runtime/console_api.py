@@ -57,6 +57,14 @@ class ConsoleRoutes:
         body = body or {}
         query = query or {}
         request_context = request_context or {}
+        auth_principal = request_context.get("auth_principal")
+        if isinstance(auth_principal, dict):
+            body = {
+                **body,
+                "actor": auth_principal.get("email") or body.get("actor"),
+                "role": auth_principal.get("role") or body.get("role"),
+                "source": "api-key" if auth_principal.get("api_key_id") else "console-session",
+            }
         base_url = str(request_context.get("base_url") or "http://127.0.0.1:8080").rstrip("/")
         actor_context = ActorContext.from_payload(
             body,

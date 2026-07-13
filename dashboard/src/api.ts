@@ -20,7 +20,7 @@ export interface ActorPayload {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(path, options);
+  const response = await fetch(path, { credentials: "include", ...(options ?? {}) });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
     const message =
@@ -39,6 +39,38 @@ function post<T>(path: string, body?: object): Promise<T> {
 }
 
 /* --------------------------- Health / decisions ---------------------------- */
+
+export type AuthRole = "viewer" | "operator" | "analyst" | "detector" | "model-risk" | "admin";
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  display_name: string;
+  role: AuthRole;
+  source?: string;
+  created_at?: string | null;
+  last_login_at?: string | null;
+}
+
+export interface AuthStatus {
+  enabled: boolean;
+  users_configured: boolean;
+  needs_bootstrap: boolean;
+  cookie_name: string;
+  password_hasher: string;
+  storage: Record<string, unknown>;
+}
+
+export interface AuthApiKey {
+  id: string;
+  key_prefix: string;
+  label: string;
+  role: AuthRole;
+  created_at?: string | null;
+  expires_at?: string | null;
+  last_used_at?: string | null;
+  revoked_at?: string | null;
+}
 
 export interface HealthResponse {
   status: string;
@@ -439,6 +471,19 @@ export interface AuditIntegrityResponse {
 }
 
 /* --------------------------------- Calls ----------------------------------- */
+
+export const getAuthStatus = () => request<AuthStatus>("/v1/auth/status");
+export const getMe = () => request<{ user: AuthUser }>("/v1/auth/me");
+export const bootstrapAuth = (body: { email: string; password: string; display_name?: string }) =>
+  post<{ user: AuthUser }>("/v1/auth/bootstrap", body);
+export const loginAuth = (body: { email: string; password: string }) =>
+  post<{ user: AuthUser }>("/v1/auth/login", body);
+export const logoutAuth = () => post<{ status: string }>("/v1/auth/logout");
+export const listApiKeys = () => request<{ api_keys: AuthApiKey[] }>("/v1/auth/api-keys");
+export const createApiKey = (body: { label: string; role?: AuthRole; expires_at?: string | null }) =>
+  post<{ api_key: AuthApiKey; token: string }>("/v1/auth/api-keys", body);
+export const revokeApiKey = (id: string) =>
+  post<{ api_key: AuthApiKey }>(`/v1/auth/api-keys/${encodeURIComponent(id)}/revoke`);
 
 export const getOverview = () => request<OverviewResponse>("/v1/overview");
 export const getDecisions = (limit = 40) =>

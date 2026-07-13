@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +13,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from .api import run
+from .auth import create_auth_store
 from .database import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_POSTGRES_COMPOSE_FILE,
@@ -367,12 +369,17 @@ def _db(args: argparse.Namespace) -> None:
         health = store.health()
         control_store = create_control_plane_store(storage_url)
         control_health = control_store.health()
+        auth_store = create_auth_store(storage_url)
+        auth_health = auth_store.health()
         close = getattr(store, "close", None)
         if callable(close):
             close()
         control_close = getattr(control_store, "close", None)
         if callable(control_close):
             control_close()
+        auth_close = getattr(auth_store, "close", None)
+        if callable(auth_close):
+            auth_close()
         save_runtime_config(RuntimeConfig(storage_url=storage_url), args.config_path)
         _print_json({
             "status": "initialized",
@@ -380,6 +387,7 @@ def _db(args: argparse.Namespace) -> None:
             "config_path": args.config_path,
             "storage": health,
             "control_plane": control_health,
+            "auth": auth_health,
         })
         return
     if args.db_command == "migrate":
@@ -390,19 +398,25 @@ def _db(args: argparse.Namespace) -> None:
         )
         store = create_runtime_store(storage_url)
         control_store = create_control_plane_store(storage_url)
+        auth_store = create_auth_store(storage_url)
         health = store.health()
         control_health = control_store.health()
+        auth_health = auth_store.health()
         close = getattr(store, "close", None)
         if callable(close):
             close()
         control_close = getattr(control_store, "close", None)
         if callable(control_close):
             control_close()
+        auth_close = getattr(auth_store, "close", None)
+        if callable(auth_close):
+            auth_close()
         _print_json({
             "status": "migrated",
             "storage_url": storage_url,
             "storage": health,
             "control_plane": control_health,
+            "auth": auth_health,
         })
         return
     raise SystemExit(f"unsupported db command: {args.db_command}")
@@ -566,10 +580,14 @@ def _request_json(
     payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     body = None if payload is None else json.dumps(payload).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    api_key = os.environ.get("TENTA_API_KEY")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
     request = Request(
         _join_url(base_url, path),
         data=body,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method=method,
     )
     try:

@@ -1,14 +1,18 @@
-import { useCallback } from "react";
-import { Badge, Button, Table, Text } from "@cloudflare/kumo";
+import { useCallback, useState } from "react";
+import { Badge, Button, Input, Table, Text } from "@cloudflare/kumo";
 import { ArrowsClockwiseIcon } from "@phosphor-icons/react";
 
 import {
+  createApiKey,
   getAuditIntegrity,
   getOperations,
   getPolicyHistory,
+  listApiKeys,
+  revokeApiKey,
   type AuditChainReport,
 } from "../api";
 import { ErrorState, InfoGrid, InfoRow, LoadingState, PageHeader, Panel, RefreshMeta, StatTile } from "../components";
+import { useOperator, useToast } from "../governance";
 import { useApi } from "../hooks";
 import { fmtInt, relTime, runtimeStatusVariant, titleize } from "../lib";
 import { navigate } from "../router";
@@ -72,10 +76,46 @@ export function Governance() {
   const policy = useApi(getPolicyHistory, 8000);
   const operations = useApi(() => getOperations(18), 8000);
   const integrity = useApi(getAuditIntegrity, 10000);
+  const apiKeys = useApi(listApiKeys, 10000);
+  const operator = useOperator();
+  const toast = useToast();
+  const [keyLabel, setKeyLabel] = useState("CLI access");
+  const [newToken, setNewToken] = useState<string | null>(null);
+  const [keyBusy, setKeyBusy] = useState<string | null>(null);
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([policy.refresh(), operations.refresh(), integrity.refresh()]);
-  }, [integrity.refresh, operations.refresh, policy.refresh]);
+    await Promise.all([policy.refresh(), operations.refresh(), integrity.refresh(), apiKeys.refresh()]);
+  }, [apiKeys.refresh, integrity.refresh, operations.refresh, policy.refresh]);
+
+  const createKey = useCallback(async () => {
+    setKeyBusy("create");
+    try {
+      const result = await createApiKey({ label: keyLabel, role: operator.role });
+      setNewToken(result.token);
+      await apiKeys.refresh();
+      toast.notify({ tone: "success", title: "API key created", detail: "The token is shown once." });
+    } catch (err) {
+      toast.notify({ tone: "error", title: "API key failed", detail: err instanceof Error ? err.message : "Could not create key" });
+    } finally {
+      setKeyBusy(null);
+    }
+  }, [apiKeys, keyLabel, operator.role, toast]);
+
+  const revokeKey = useCallback(
+    async (id: string) => {
+      setKeyBusy(id);
+      try {
+        await revokeApiKey(id);
+        await apiKeys.refresh();
+        toast.notify({ tone: "success", title: "API key revoked" });
+      } catch (err) {
+        toast.notify({ tone: "error", title: "Revoke failed", detail: err instanceof Error ? err.message : "Could not revoke key" });
+      } finally {
+        setKeyBusy(null);
+      }
+    },
+    [apiKeys, toast],
+  );
 
   const loading =
     policy.loading &&
@@ -149,6 +189,43 @@ export function Governance() {
           <ChainPanel report={report.operations} />
         </div>
       )}
+
+      <Panel eyebrow="Local auth" title="API keys">
+        <div className="api-key-create">
+          <Input label="Label" size="sm" value={keyLabel} onChange={(event) => setKeyLabel(event.target.value)} />
+          <Button variant="secondary" loading={keyBusy === "create"} onClick={createKey}>
+            Create key
+          </Button>
+        </div>
+        {newToken && (
+          <div className="api-key-token">
+            <span>Shown once</span>
+            <code>{newToken}</code>
+          </div>
+        )}
+        <div className="api-key-list">
+          {(apiKeys.data?.api_keys ?? []).length === 0 ? (
+            <p className="empty-hint">No API keys created for this user.</p>
+          ) : (
+            (apiKeys.data?.api_keys ?? []).map((key) => (
+              <div className="api-key-row" key={key.id}>
+                <div>
+                  <strong>{key.label}</strong>
+                  <span className="mono">prefix {key.key_prefix} / {key.role}</span>
+                </div>
+                <Badge variant={key.revoked_at ? "neutral" : "success"} appearance="dot">
+                  {key.revoked_at ? "revoked" : "active"}
+                </Badge>
+                {!key.revoked_at && (
+                  <Button variant="ghost" size="xs" loading={keyBusy === key.id} onClick={() => revokeKey(key.id)}>
+                    Revoke
+                  </Button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </Panel>
 
       <Panel eyebrow="Operation ledger" title="Recent control-plane events" padding={false}>
         {events.length === 0 ? (

@@ -12,6 +12,8 @@ import { createPortal } from "react-dom";
 import { Badge, Button } from "@cloudflare/kumo";
 import { CheckCircleIcon, WarningCircleIcon, XCircleIcon, XIcon } from "@phosphor-icons/react";
 
+import type { AuthUser } from "./api";
+
 export type OperatorRole = "viewer" | "operator" | "analyst" | "detector" | "model-risk" | "admin";
 
 export interface ActorPayload {
@@ -51,51 +53,44 @@ const MUTATION_PERMISSIONS: Record<Operation, OperatorRole[]> = {
 
 interface OperatorState {
   actor: string;
+  displayName: string;
   role: OperatorRole;
   setActor: (actor: string) => void;
   setRole: (role: OperatorRole) => void;
+  logout?: () => Promise<void>;
   can: (operation: Operation) => boolean;
   payload: (reason?: string) => ActorPayload;
 }
 
 const OperatorContext = createContext<OperatorState | null>(null);
 
-function saved(key: string, fallback: string): string {
-  try {
-    return window.localStorage.getItem(key) || fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function requestId(): string {
   return `console-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 }
 
-export function OperatorProvider({ children }: { children: ReactNode }) {
-  const [actor, setActorState] = useState(() => saved("tenta.operator.actor", "operator@console"));
-  const [role, setRoleState] = useState<OperatorRole>(() => {
-    const stored = saved("tenta.operator.role", "model-risk");
-    return isOperatorRole(stored) ? stored : "model-risk";
-  });
-
-  const setActor = useCallback((value: string) => {
-    const next = value.trim() || "operator@console";
-    setActorState(next);
-    window.localStorage.setItem("tenta.operator.actor", next);
-  }, []);
-
-  const setRole = useCallback((value: OperatorRole) => {
-    setRoleState(value);
-    window.localStorage.setItem("tenta.operator.role", value);
-  }, []);
+export function OperatorProvider({
+  user,
+  onLogout,
+  children,
+}: {
+  user: AuthUser;
+  onLogout?: () => Promise<void>;
+  children: ReactNode;
+}) {
+  const actor = user.email;
+  const role = isOperatorRole(user.role) ? user.role : "viewer";
+  const displayName = user.display_name || user.email;
+  const setActor = useCallback(() => undefined, []);
+  const setRole = useCallback(() => undefined, []);
 
   const value = useMemo<OperatorState>(
     () => ({
       actor,
+      displayName,
       role,
       setActor,
       setRole,
+      logout: onLogout,
       can: (operation) => MUTATION_PERMISSIONS[operation].includes(role),
       payload: (reason) => ({
         actor,
@@ -105,7 +100,7 @@ export function OperatorProvider({ children }: { children: ReactNode }) {
         ...(reason?.trim() ? { reason: reason.trim() } : {}),
       }),
     }),
-    [actor, role, setActor, setRole],
+    [actor, displayName, onLogout, role, setActor, setRole],
   );
 
   return <OperatorContext.Provider value={value}>{children}</OperatorContext.Provider>;

@@ -19,7 +19,7 @@ import {
 
 import type { OverviewResponse } from "./api";
 import { Logo } from "./components/Logo";
-import { isOperatorRole, useOperator, type OperatorRole } from "./governance";
+import { useOperator, type OperatorRole } from "./governance";
 import { navigate, type Route, useRoute } from "./router";
 
 interface NavItem {
@@ -179,15 +179,10 @@ interface ShellProps {
 export function Shell({ overview, mode, onToggleTheme, children }: ShellProps) {
   const route = useRoute();
   const operator = useOperator();
-  const [actorDraft, setActorDraft] = useState(operator.actor);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const runtimeStatus = overview?.health.status ?? "unknown";
   const healthy = runtimeStatus === "healthy";
-
-  useEffect(() => {
-    setActorDraft(operator.actor);
-  }, [operator.actor]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -326,36 +321,15 @@ export function Shell({ overview, mode, onToggleTheme, children }: ShellProps) {
             <div className="operator">
               <span className="operator-avatar">{initials(operator.actor)}</span>
               <div className="operator-meta">
-                <input
-                  className="operator-input"
-                  aria-label="Operator identity"
-                  value={actorDraft}
-                  onChange={(event) => setActorDraft(event.target.value)}
-                  onBlur={() => operator.setActor(actorDraft)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      operator.setActor(actorDraft);
-                      event.currentTarget.blur();
-                    }
-                  }}
-                />
-                <select
-                  className="operator-role-select"
-                  aria-label="Operator role"
-                  value={operator.role}
-                  onChange={(event) => {
-                    const next = event.target.value;
-                    if (isOperatorRole(next)) operator.setRole(next);
-                  }}
-                >
-                  {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                <span className="operator-name">{operator.displayName}</span>
+                <span className="operator-role">{ROLE_LABELS[operator.role]}</span>
               </div>
             </div>
+            {operator.logout && (
+              <Button variant="ghost" size="sm" onClick={() => operator.logout?.()}>
+                Sign out
+              </Button>
+            )}
           </div>
         </header>
 

@@ -318,8 +318,6 @@ body {
   gap: 2px;
 }
 
-.operator-input,
-.operator-role-select,
 .table-controls input,
 .table-controls select,
 .command-input-row input,
@@ -332,20 +330,12 @@ body {
   font: inherit;
 }
 
-.operator-input {
-  width: 150px;
-  border: 0;
-  padding: 0;
-  background: transparent;
+.operator-name {
   font-size: 0.82rem;
   font-weight: 600;
 }
 
-.operator-role-select {
-  width: 150px;
-  padding: 1px 4px;
-  border: 0;
-  background: transparent;
+.operator-role {
   font-size: 0.7rem;
   color: var(--text-color-kumo-subtle);
 }
@@ -354,6 +344,48 @@ body {
   padding: 22px 24px 44px;
   max-width: 1520px;
   width: 100%;
+}
+
+/* ============================ Auth gate ============================ */
+
+.auth-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--color-kumo-canvas);
+}
+
+.auth-panel {
+  width: min(430px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid var(--color-kumo-line);
+  border-radius: var(--radius);
+  background: var(--color-kumo-base);
+  box-shadow: var(--panel-shadow);
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.auth-brand h1 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.auth-brand p {
+  margin: 2px 0 0;
+  color: var(--text-color-kumo-subtle);
+}
+
+.auth-form {
+  display: grid;
+  gap: 13px;
 }
 
 /* ============================ Page header ============================ */
@@ -1465,6 +1497,65 @@ input[type="range"]::-moz-range-thumb {
   gap: 7px;
 }
 
+/* ======================= API keys ======================= */
+
+.api-key-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.api-key-token {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in oklch, var(--color-kumo-brand) 30%, var(--color-kumo-line));
+  border-radius: var(--radius-sm);
+  background: color-mix(in oklch, var(--color-kumo-brand) 7%, var(--color-kumo-canvas));
+}
+
+.api-key-token span {
+  color: var(--text-color-kumo-subtle);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.api-key-token code {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+}
+
+.api-key-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.api-key-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid var(--color-kumo-hairline);
+  border-radius: var(--radius-sm);
+  background: var(--color-kumo-canvas);
+}
+
+.api-key-row > div {
+  display: grid;
+  gap: 2px;
+}
+
+.api-key-row span {
+  color: var(--text-color-kumo-subtle);
+}
+
 /* ======================= Timeline (governance) ======================= */
 
 .timeline {
@@ -1833,10 +1924,6 @@ input[type="range"]::-moz-range-thumb {
   }
   .command-button {
     display: none;
-  }
-  .operator-input,
-  .operator-role-select {
-    width: 112px;
   }
   .page-header {
     align-items: flex-start;
