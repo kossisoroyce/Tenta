@@ -252,6 +252,7 @@ export function Scoring() {
         <Panel
           eyebrow="Decision trail"
           title="Latest decision"
+          className="sticky-panel"
           actions={<Badge variant={decisionVariant(decision)}>{decision}</Badge>}
         >
           <div className="gauge">
@@ -302,7 +303,32 @@ export function Scoring() {
               </div>
             </>
           ) : (
-            <p className="empty-hint">Run or inspect a request to see its decision trail.</p>
+            <>
+              <p className="empty-hint">
+                Run or inspect a request to see its full decision trail. This request will be
+                scored by:
+              </p>
+              <InfoGrid>
+                <InfoRow label="Live model">
+                  <span className="mono">
+                    {model?.model_id ?? "—"} · {model?.model_version ?? ""}
+                  </span>
+                </InfoRow>
+                <InfoRow label="Workload">
+                  <span className="mono">
+                    {activeWorkload?.name ?? overview?.health.workload?.name ?? "—"}
+                  </span>
+                </InfoRow>
+                <InfoRow label="Policy">
+                  <span className="mono">{policy?.version ?? "—"}</span>
+                </InfoRow>
+                <InfoRow label="Thresholds">
+                  <span className="mono">
+                    review {policy?.review_threshold ?? "—"} · block {policy?.block_threshold ?? "—"}
+                  </span>
+                </InfoRow>
+              </InfoGrid>
+            </>
           )}
         </Panel>
       </div>

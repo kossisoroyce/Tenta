@@ -533,7 +533,7 @@ class LocalAuthService:
             "users_configured": users > 0,
             "needs_bootstrap": users == 0,
             "cookie_name": AUTH_COOKIE_NAME,
-            "password_hasher": "scrypt",
+            "password_hasher": password_hasher_name(),
             "storage": self.store.health(),
         }
 
@@ -1101,16 +1101,31 @@ class PostgresAuthStore:
         return int(row["version"] or 0)
 
 
+# Not every CPython build ships OpenSSL with scrypt enabled; fall back to
+# PBKDF2-HMAC-SHA256 (always available) so auth works on any interpreter.
+_SCRYPT_AVAILABLE = hasattr(hashlib, "scrypt")
+_PBKDF2_ITERATIONS = 600_000
+
+
+def password_hasher_name() -> str:
+    return "scrypt" if _SCRYPT_AVAILABLE else "pbkdf2_sha256"
+
+
 def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
-    n = 2 ** 14
-    r = 8
-    p = 1
-    digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=n, r=r, p=p, dklen=32)
-    return "scrypt${}${}${}${}${}".format(
-        n,
-        r,
-        p,
+    if _SCRYPT_AVAILABLE:
+        n, r, p = 2 ** 14, 8, 1
+        digest = hashlib.scrypt(password.encode("utf-8"), salt=salt, n=n, r=r, p=p, dklen=32)
+        return "scrypt${}${}${}${}${}".format(
+            n,
+            r,
+            p,
+            base64.b64encode(salt).decode("ascii"),
+            base64.b64encode(digest).decode("ascii"),
+        )
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _PBKDF2_ITERATIONS, dklen=32)
+    return "pbkdf2_sha256${}${}${}".format(
+        _PBKDF2_ITERATIONS,
         base64.b64encode(salt).decode("ascii"),
         base64.b64encode(digest).decode("ascii"),
     )
@@ -1118,20 +1133,29 @@ def hash_password(password: str) -> str:
 
 def verify_password(password: str, encoded: str) -> bool:
     try:
-        scheme, raw_n, raw_r, raw_p, raw_salt, raw_digest = encoded.split("$", 5)
-        if scheme != "scrypt":
-            return False
-        salt = base64.b64decode(raw_salt.encode("ascii"))
-        expected = base64.b64decode(raw_digest.encode("ascii"))
-        digest = hashlib.scrypt(
-            password.encode("utf-8"),
-            salt=salt,
-            n=int(raw_n),
-            r=int(raw_r),
-            p=int(raw_p),
-            dklen=len(expected),
-        )
-        return hmac.compare_digest(digest, expected)
+        scheme = encoded.split("$", 1)[0]
+        if scheme == "scrypt":
+            if not _SCRYPT_AVAILABLE:
+                return False
+            _, raw_n, raw_r, raw_p, raw_salt, raw_digest = encoded.split("$", 5)
+            salt = base64.b64decode(raw_salt.encode("ascii"))
+            expected = base64.b64decode(raw_digest.encode("ascii"))
+            digest = hashlib.scrypt(
+                password.encode("utf-8"),
+                salt=salt,
+                n=int(raw_n),
+                r=int(raw_r),
+                p=int(raw_p),
+                dklen=len(expected),
+            )
+            return hmac.compare_digest(digest, expected)
+        if scheme == "pbkdf2_sha256":
+            _, raw_iter, raw_salt, raw_digest = encoded.split("$", 3)
+            salt = base64.b64decode(raw_salt.encode("ascii"))
+            expected = base64.b64decode(raw_digest.encode("ascii"))
+            digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, int(raw_iter), dklen=len(expected))
+            return hmac.compare_digest(digest, expected)
+        return False
     except Exception:
         return False
 

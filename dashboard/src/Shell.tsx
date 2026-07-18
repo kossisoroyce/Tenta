@@ -270,13 +270,13 @@ export function Shell({ overview, mode, onToggleTheme, children }: ShellProps) {
               Production
             </Badge>
             <span className="topbar-sep" />
-            <span className="topbar-chip">
+            <span className="topbar-chip chip-workload">
               <span className="topbar-chip-label">Workload</span>
               <span className="topbar-chip-value">
                 {overview?.health.workload?.name ?? "—"}
               </span>
             </span>
-            <span className="topbar-chip">
+            <span className="topbar-chip chip-model">
               <span className="topbar-chip-label">Live model</span>
               <span className="topbar-chip-value">
                 {overview?.summary.champion ?? "—"}{" "}
@@ -284,7 +284,7 @@ export function Shell({ overview, mode, onToggleTheme, children }: ShellProps) {
               </span>
             </span>
             {overview && overview.summary.shadow && (
-              <span className="topbar-chip">
+              <span className="topbar-chip chip-shadow">
                 <span className="topbar-chip-label">Shadow</span>
                 <span className="topbar-chip-value">{overview.summary.shadow}</span>
               </span>

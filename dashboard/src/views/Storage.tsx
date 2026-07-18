@@ -157,9 +157,9 @@ export function Storage() {
 
       <div className="kpi-row">
         <StatTile
-          label="Connected store"
+          label="Active store"
           value={connected.backend ? titleize(connected.backend) : "Unknown"}
-          sub={connected.path ?? data.configured_storage_url}
+          sub={connected.path ? connected.path : `Configured: ${data.configured_storage_url}`}
           accent={
             <Badge variant={runtimeStatusVariant(connected.status)} appearance="dot">
               {connected.status ?? "unknown"}

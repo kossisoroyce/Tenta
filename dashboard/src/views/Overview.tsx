@@ -40,7 +40,7 @@ export function Overview() {
         }
       />
 
-      <div className="kpi-row">
+      <div className="kpi-row kpi-5">
         <StatTile
           label="Runtime health"
           value={health.status === "healthy" ? "Healthy" : "Degraded"}
@@ -71,7 +71,7 @@ export function Overview() {
         <StatTile
           label="Model health alerts"
           value={fmtInt(summary.open_drift_alerts)}
-          sub={`${fmtInt(summary.pending_labels)} labels pending`}
+          sub="Critical + warning segments"
           tone={summary.open_drift_alerts > 0 ? "warning" : "default"}
         />
         <StatTile

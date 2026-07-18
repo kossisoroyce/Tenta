@@ -3,6 +3,7 @@ import { Button, Input, Text } from "@cloudflare/kumo";
 
 import { bootstrapAuth, getAuthStatus, getMe, getOverview, loginAuth, logoutAuth, type AuthStatus, type AuthUser } from "./api";
 import { Logo } from "./components/Logo";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { OperatorProvider, ToastProvider } from "./governance";
 import { useApi } from "./hooks";
 import { Shell } from "./Shell";
@@ -74,7 +75,7 @@ function AuthGate() {
   if (loading && !status) {
     return <AuthShell title="Loading Tenta" />;
   }
-  if (status?.needs_bootstrap) {
+  if (!user && status?.needs_bootstrap) {
     return <AuthForm mode="bootstrap" onDone={setUser} />;
   }
   if (!user) {
@@ -110,6 +111,7 @@ function AuthForm({ mode, onDone }: { mode: "bootstrap" | "login"; onDone: (user
   const [email, setEmail] = useState("admin@tenta.local");
   const [displayName, setDisplayName] = useState("Administrator");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const bootstrap = mode === "bootstrap";
@@ -137,7 +139,18 @@ function AuthForm({ mode, onDone }: { mode: "bootstrap" | "login"; onDone: (user
         {bootstrap && (
           <Input label="Display name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} required />
         )}
-        <Input label="Password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+        <div className="password-field">
+          <Input
+            label="Password"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+          <button type="button" className="password-toggle" onClick={() => setShowPassword((v) => !v)}>
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
         {error && <Text variant="error" size="sm">{error}</Text>}
         <Button type="submit" variant="primary" loading={busy}>
           {bootstrap ? "Create admin" : "Sign in"}
@@ -166,7 +179,9 @@ function ConsoleApp() {
 
   return (
     <Shell overview={overview} mode={mode} onToggleTheme={toggleTheme}>
-      <View />
+      <ErrorBoundary key={route}>
+        <View />
+      </ErrorBoundary>
     </Shell>
   );
 }

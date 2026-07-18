@@ -221,19 +221,13 @@ export function Models() {
     [refresh, toast],
   );
 
-  if (loading && !data) return <LoadingState />;
-  if (error && !data) return <ErrorState message={error} />;
-  if (!data) return null;
-
-  const champion = data.models.find((m) => m.stage === "champion");
-  const shadow = data.models.find((m) => m.stage === "shadow");
-  const championMetrics = champion?.metrics ?? null;
-  const shadowMetrics = shadow?.metrics ?? null;
-  const previousChampion = [...data.models].reverse().find((m) => m.stage === "archived")?.model_id;
-  const canManageModels = operator.can("model.promote");
+  // Hooks must run unconditionally on every render — keep them above the
+  // loading/error early returns (a hook after an early return crashes React
+  // once data transitions from null to loaded).
   const filteredModels = useMemo(() => {
+    const models = data?.models ?? [];
     const needle = filter.trim().toLowerCase();
-    return data.models
+    return models
       .filter((model) => {
         const matchesText = !needle || `${model.model_id} ${model.version} ${model.backend}`.toLowerCase().includes(needle);
         const matchesStage = stageFilter === "all" || model.stage === stageFilter;
@@ -246,13 +240,24 @@ export function Models() {
         if (sortKey === "promoted") return new Date(b.promoted_at ?? 0).getTime() - new Date(a.promoted_at ?? 0).getTime();
         return a.stage.localeCompare(b.stage) || a.model_id.localeCompare(b.model_id);
       });
-  }, [data.models, filter, sortKey, stageFilter]);
-  const pageCount = Math.max(1, Math.ceil(filteredModels.length / pageSize));
-  const visibleModels = filteredModels.slice(page * pageSize, page * pageSize + pageSize);
+  }, [data?.models, filter, sortKey, stageFilter]);
 
   useEffect(() => {
     setPage(0);
   }, [filter, stageFilter, sortKey]);
+
+  if (loading && !data) return <LoadingState />;
+  if (error && !data) return <ErrorState message={error} />;
+  if (!data) return null;
+
+  const champion = data.models.find((m) => m.stage === "champion");
+  const shadow = data.models.find((m) => m.stage === "shadow");
+  const championMetrics = champion?.metrics ?? null;
+  const shadowMetrics = shadow?.metrics ?? null;
+  const previousChampion = [...data.models].reverse().find((m) => m.stage === "archived")?.model_id;
+  const canManageModels = operator.can("model.promote");
+  const pageCount = Math.max(1, Math.ceil(filteredModels.length / pageSize));
+  const visibleModels = filteredModels.slice(page * pageSize, page * pageSize + pageSize);
 
   const confirmAction = async (reason: string) => {
     if (!confirm) return;
