@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@cloudflare/kumo':
-        specifier: ^2.7.0
-        version: 2.7.0(@date-fns/tz@1.5.0)(@phosphor-icons/react@2.1.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@types/react@19.2.17)(date-fns@4.4.0)(echarts@6.1.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
+        specifier: ^2.8.0
+        version: 2.8.0(@date-fns/tz@1.5.0)(@phosphor-icons/react@2.1.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@types/react@19.2.17)(date-fns@4.4.0)(echarts@6.1.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
       '@phosphor-icons/react':
         specifier: ^2.1.10
         version: 2.1.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -76,8 +76,8 @@ packages:
       '@types/react':
         optional: true
 
-  '@cloudflare/kumo@2.7.0':
-    resolution: {integrity: sha512-KniieEmj/ZwqffqmLIVW76JnMuG5aeKJrs1nmSMME3U2wFo4yEzQtbLrLujNR2xmiDed5qm2PKpO03BltQa2mw==}
+  '@cloudflare/kumo@2.8.0':
+    resolution: {integrity: sha512-zhS8m73xSqoWeUs1KvhancIm5lz8xMqk4OPDoX6q+ffqwSGXNchXzUv987eEI7Q8wg2eJEwXHuL/joc0u79Xwg==}
     hasBin: true
     peerDependencies:
       '@phosphor-icons/react': ^2.1.10
@@ -812,7 +812,7 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.17
 
-  '@cloudflare/kumo@2.7.0(@date-fns/tz@1.5.0)(@phosphor-icons/react@2.1.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@types/react@19.2.17)(date-fns@4.4.0)(echarts@6.1.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)':
+  '@cloudflare/kumo@2.8.0(@date-fns/tz@1.5.0)(@phosphor-icons/react@2.1.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@types/react@19.2.17)(date-fns@4.4.0)(echarts@6.1.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)':
     dependencies:
       '@base-ui/react': 1.6.0(@date-fns/tz@1.5.0)(@types/react@19.2.17)(date-fns@4.4.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@phosphor-icons/react': 2.1.10(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
