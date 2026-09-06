@@ -15,7 +15,7 @@
     "echarts": "^6.1.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
